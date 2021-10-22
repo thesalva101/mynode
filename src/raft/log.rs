@@ -121,6 +121,100 @@ impl Log {
         Ok(Some((self.apply_index, output)))
     }
 
+    /// Splices a set of entries onto an offset. The semantics are a bit unusual,
+    /// since this is primarily used when replicating Raft entries:
+    ///
+    /// * If the base and base term does not match an existing entry, raise Error::RaftBaseNotFound
+    /// * If no existing entry exists at an index, append it
+    /// * If the existing entry has a different term, replace it and following entries
+    /// * If the existing entry has the same term, assume entry is equal and skip it
+    //
+    // TODO: FIXME Needs to be transactional
+    pub fn splice(&mut self, base: u64, base_term: u64, entries: Vec<Entry>) -> Result<u64, Error> {
+        if !self.has(base, base_term)? {
+            return Err(Error::RaftBaseNotFound {
+                index: base,
+                term: base_term,
+            });
+        }
+
+        for (i, entry) in entries.into_iter().enumerate() {
+            let target_index = base + i as u64 + 1;
+            if let Some(current) = self.get(target_index)? {
+                if current.term == entry.term {
+                    continue;
+                }
+                self.truncate(target_index - 1)?;
+            }
+            self.append(entry)?;
+        }
+
+        Ok(self.last_index)
+    }
+
+    /// Truncates the log such that its last item is at most index.
+    /// Refuses to remove entries that have been applied or committed.
+    fn truncate(&mut self, index: u64) -> Result<u64, Error> {
+        debug!("Truncating log from index {}", index);
+        if index < self.apply_index {
+            return Err(Error::Value(format!(
+                "Cannot remove applied log entry, current applied index: {}.",
+                self.apply_index
+            )));
+        } else if index < self.commit_index {
+            return Err(Error::Value(format!(
+                "Cannot remove committed log entry, current committed index: {}.",
+                self.apply_index
+            )));
+        }
+
+        for i in (index + 1)..=self.last_index {
+            self.kv.delete(&i.to_string())?;
+        }
+        self.last_index = std::cmp::min(index, self.last_index);
+        self.last_term = self.get(self.last_index)?.map_or(0, |e| e.term);
+
+        Ok(self.last_index)
+    }
+
+    /// Loads information about the most recent term known by the log,
+    /// containing the term number (0 if none) and candidate voted for
+    /// in current term (if any).
+    pub fn load_term(&self) -> Result<(u64, Option<String>), Error> {
+        let term = if let Some(value) = self.kv.get("term")? {
+            deserialize(value)?
+        } else {
+            0
+        };
+        let voted_for = if let Some(value) = self.kv.get("voted_for")? {
+            Some(deserialize(value)?)
+        } else {
+            None
+        };
+        debug!(
+            "Loaded term {} and voted_for {:?} from log",
+            term, voted_for
+        );
+        Ok((term, voted_for))
+    }
+
+    /// Saves information about the most recent term.
+    // TODO: FIXME Should be transactional.
+    pub fn save_term(&mut self, term: u64, voted_for: Option<&str>) -> Result<(), Error> {
+        if term > 0 {
+            self.kv.set("term", serialize(term)?)?
+        } else {
+            self.kv.delete("term")?
+        }
+        if let Some(v) = voted_for {
+            self.kv.set("voted_for", serialize(v)?)?
+        } else {
+            self.kv.delete("voted_for")?
+        }
+        debug!("Saved term={} and voted_for={:?}", term, voted_for);
+        Ok(())
+    }
+
     /// Fetches an entry at an index
     pub fn get(&self, index: u64) -> Result<Option<Entry>, Error> {
         if let Some(value) = self.kv.get(&index.to_string())? {
@@ -151,9 +245,22 @@ impl Log {
             return Ok(true);
         }
         match self.get(index)? {
-            Some(ref entry) => Ok(entry.term == term),
+            Some(entry) => Ok(entry.term == term), // TODO: why compare only the term and not the command?
             None => Ok(false),
         }
+    }
+
+    /// Fetches a range of entries
+    // TODO: FIXME Should take all kinds of ranges (generic over std::ops::RangeBounds),
+    // and use kv::Store.range() once implemented.
+    pub fn range_from(&self, range: std::ops::RangeFrom<u64>) -> Result<Vec<Entry>, Error> {
+        let mut entries = Vec::new();
+        for i in range.start..=self.last_index {
+            if let Some(entry) = self.get(i)? {
+                entries.push(entry)
+            }
+        }
+        Ok(entries)
     }
 
     fn get_last_index_and_term<S: Store>(store: &S) -> Result<(u64, u64), Error> {
@@ -467,5 +574,471 @@ mod tests {
         assert_eq!(false, l.has(1, 3).unwrap());
         assert_eq!(false, l.has(2, 0).unwrap());
         assert_eq!(false, l.has(2, 1).unwrap());
+    }
+
+    #[test]
+    fn load_save_term() {
+        let (mut l, store) = setup();
+        assert_eq!(Ok((0, None)), l.load_term());
+        assert_eq!(Ok(()), l.save_term(1, Some("a")));
+
+        let mut l = Log::new(store.clone()).unwrap();
+        assert_eq!(Ok((1, Some("a".into()))), l.load_term());
+        assert_eq!(Ok(()), l.save_term(3, Some("c")));
+
+        let mut l = Log::new(store.clone()).unwrap();
+        assert_eq!(Ok((3, Some("c".into()))), l.load_term());
+        assert_eq!(Ok(()), l.save_term(0, None));
+
+        let l = Log::new(store.clone()).unwrap();
+        assert_eq!(Ok((0, None)), l.load_term());
+    }
+
+    #[test]
+    fn splice() {
+        let (mut l, _) = setup();
+        l.append(Entry {
+            term: 1,
+            command: Some(vec![0x01]),
+        })
+        .unwrap();
+        l.append(Entry {
+            term: 2,
+            command: Some(vec![0x02]),
+        })
+        .unwrap();
+        l.append(Entry {
+            term: 3,
+            command: Some(vec![0x03]),
+        })
+        .unwrap();
+
+        assert_eq!(
+            Ok(4),
+            l.splice(
+                2,
+                2,
+                vec![
+                    Entry {
+                        term: 3,
+                        command: Some(vec![0x03])
+                    },
+                    Entry {
+                        term: 4,
+                        command: Some(vec![0x04])
+                    },
+                ]
+            )
+        );
+        assert_eq!(
+            Ok(Some(Entry {
+                term: 1,
+                command: Some(vec![0x01])
+            })),
+            l.get(1)
+        );
+        assert_eq!(
+            Ok(Some(Entry {
+                term: 2,
+                command: Some(vec![0x02])
+            })),
+            l.get(2)
+        );
+        assert_eq!(
+            Ok(Some(Entry {
+                term: 3,
+                command: Some(vec![0x03])
+            })),
+            l.get(3)
+        );
+        assert_eq!(
+            Ok(Some(Entry {
+                term: 4,
+                command: Some(vec![0x04])
+            })),
+            l.get(4)
+        );
+        assert_eq!((4, 4), l.get_last());
+    }
+
+    #[test]
+    fn splice_all() {
+        let (mut l, _) = setup();
+        l.append(Entry {
+            term: 1,
+            command: Some(vec![0x01]),
+        })
+        .unwrap();
+        l.append(Entry {
+            term: 2,
+            command: Some(vec![0x02]),
+        })
+        .unwrap();
+        l.append(Entry {
+            term: 3,
+            command: Some(vec![0x03]),
+        })
+        .unwrap();
+
+        assert_eq!(
+            Ok(2),
+            l.splice(
+                0,
+                0,
+                vec![
+                    Entry {
+                        term: 4,
+                        command: Some(vec![0x0a])
+                    },
+                    Entry {
+                        term: 4,
+                        command: Some(vec![0x0b])
+                    },
+                ]
+            )
+        );
+        assert_eq!(
+            Ok(Some(Entry {
+                term: 4,
+                command: Some(vec![0x0a])
+            })),
+            l.get(1)
+        );
+        assert_eq!(
+            Ok(Some(Entry {
+                term: 4,
+                command: Some(vec![0x0b])
+            })),
+            l.get(2)
+        );
+        assert_eq!((2, 4), l.get_last());
+    }
+
+    #[test]
+    fn splice_append() {
+        let (mut l, _) = setup();
+        l.append(Entry {
+            term: 1,
+            command: Some(vec![0x01]),
+        })
+        .unwrap();
+        l.append(Entry {
+            term: 2,
+            command: Some(vec![0x02]),
+        })
+        .unwrap();
+
+        assert_eq!(
+            Ok(4),
+            l.splice(
+                2,
+                2,
+                vec![
+                    Entry {
+                        term: 3,
+                        command: Some(vec![0x03])
+                    },
+                    Entry {
+                        term: 4,
+                        command: Some(vec![0x04])
+                    },
+                ]
+            )
+        );
+        assert_eq!(
+            Ok(Some(Entry {
+                term: 1,
+                command: Some(vec![0x01])
+            })),
+            l.get(1)
+        );
+        assert_eq!(
+            Ok(Some(Entry {
+                term: 2,
+                command: Some(vec![0x02])
+            })),
+            l.get(2)
+        );
+        assert_eq!(
+            Ok(Some(Entry {
+                term: 3,
+                command: Some(vec![0x03])
+            })),
+            l.get(3)
+        );
+        assert_eq!(
+            Ok(Some(Entry {
+                term: 4,
+                command: Some(vec![0x04])
+            })),
+            l.get(4)
+        );
+        assert_eq!((4, 4), l.get_last());
+    }
+
+    #[test]
+    fn splice_base_missing() {
+        let (mut l, _) = setup();
+        l.append(Entry {
+            term: 1,
+            command: Some(vec![0x01]),
+        })
+        .unwrap();
+        l.append(Entry {
+            term: 2,
+            command: Some(vec![0x02]),
+        })
+        .unwrap();
+
+        assert_eq!(
+            l.splice(
+                3,
+                3,
+                vec![Entry {
+                    term: 4,
+                    command: Some(vec![0x04])
+                },]
+            ),
+            Err(Error::RaftBaseNotFound { index: 3, term: 3 })
+        );
+        assert_eq!(
+            Ok(Some(Entry {
+                term: 1,
+                command: Some(vec![0x01])
+            })),
+            l.get(1)
+        );
+        assert_eq!(
+            Ok(Some(Entry {
+                term: 2,
+                command: Some(vec![0x02])
+            })),
+            l.get(2)
+        );
+        assert_eq!((2, 2), l.get_last());
+    }
+
+    #[test]
+    fn splice_base_term_conflict() {
+        let (mut l, _) = setup();
+        l.append(Entry {
+            term: 1,
+            command: Some(vec![0x01]),
+        })
+        .unwrap();
+        l.append(Entry {
+            term: 2,
+            command: Some(vec![0x02]),
+        })
+        .unwrap();
+
+        assert_matches!(
+            l.splice(2, 3, vec![Entry { term: 4, command: Some(vec![0x04]) },]),
+            Err(Error::RaftBaseNotFound { index, term }) if index == 2 && term == 3
+        );
+        assert_matches!(
+            l.splice(2, 0, vec![Entry { term: 4, command: Some(vec![0x04]) },]),
+            Err(Error::RaftBaseNotFound { index, term }) if index == 2 && term == 0
+        );
+        assert_eq!(
+            Ok(Some(Entry {
+                term: 1,
+                command: Some(vec![0x01])
+            })),
+            l.get(1)
+        );
+        assert_eq!(
+            Ok(Some(Entry {
+                term: 2,
+                command: Some(vec![0x02])
+            })),
+            l.get(2)
+        );
+        assert_eq!((2, 2), l.get_last());
+    }
+
+    #[test]
+    fn splice_overlap_inside() {
+        let (mut l, _) = setup();
+        l.append(Entry {
+            term: 1,
+            command: Some(vec![0x01]),
+        })
+        .unwrap();
+        l.append(Entry {
+            term: 2,
+            command: Some(vec![0x02]),
+        })
+        .unwrap();
+        l.append(Entry {
+            term: 3,
+            command: Some(vec![0x03]),
+        })
+        .unwrap();
+
+        assert_eq!(
+            Ok(3),
+            l.splice(
+                1,
+                1,
+                vec![Entry {
+                    term: 2,
+                    command: Some(vec![0x04]) // TODO: not really overlapping, is it desired?
+                },]
+            )
+        );
+        assert_eq!(
+            Ok(Some(Entry {
+                term: 1,
+                command: Some(vec![0x01])
+            })),
+            l.get(1)
+        );
+        assert_eq!(
+            Ok(Some(Entry {
+                term: 2,
+                command: Some(vec![0x02])
+            })),
+            l.get(2)
+        );
+        assert_eq!(
+            Ok(Some(Entry {
+                term: 3,
+                command: Some(vec![0x03])
+            })),
+            l.get(3)
+        );
+        assert_eq!((3, 3), l.get_last());
+    }
+
+    #[test]
+    fn range_from() {
+        let (mut l, _) = setup();
+        l.append(Entry {
+            term: 1,
+            command: Some(vec![0x01]),
+        })
+        .unwrap();
+        l.append(Entry {
+            term: 1,
+            command: Some(vec![0x02]),
+        })
+        .unwrap();
+        l.append(Entry {
+            term: 1,
+            command: Some(vec![0x03]),
+        })
+        .unwrap();
+
+        assert_eq!(
+            Ok(vec![
+                Entry {
+                    term: 1,
+                    command: Some(vec![0x01])
+                },
+                Entry {
+                    term: 1,
+                    command: Some(vec![0x02])
+                },
+                Entry {
+                    term: 1,
+                    command: Some(vec![0x03])
+                },
+            ]),
+            l.range_from(0..)
+        );
+
+        assert_eq!(
+            Ok(vec![
+                Entry {
+                    term: 1,
+                    command: Some(vec![0x02])
+                },
+                Entry {
+                    term: 1,
+                    command: Some(vec![0x03])
+                },
+            ]),
+            l.range_from(2..)
+        );
+
+        assert_eq!(Ok(vec![]), l.range_from(4..));
+    }
+
+    #[test]
+    fn truncate() {
+        let (mut l, _) = setup();
+        setup_appends(&mut l);
+
+        assert_eq!(Ok(2), l.truncate(2));
+        assert_eq!(
+            Ok(Some(Entry {
+                term: 1,
+                command: Some(vec![0x01])
+            })),
+            l.get(1)
+        );
+        assert_eq!(
+            Ok(Some(Entry {
+                term: 2,
+                command: None
+            })),
+            l.get(2)
+        );
+        assert_eq!(Ok(None), l.get(3));
+        assert_eq!((2, 2), l.get_last());
+    }
+
+    #[test]
+    fn truncate_beyond() {
+        let (mut l, _) = setup();
+        setup_appends(&mut l);
+
+        assert_eq!(Ok(3), l.truncate(4));
+        assert_eq!(
+            Ok(Some(Entry {
+                term: 1,
+                command: Some(vec![0x01])
+            })),
+            l.get(1)
+        );
+        assert_eq!(
+            Ok(Some(Entry {
+                term: 2,
+                command: None,
+            })),
+            l.get(2)
+        );
+        assert_eq!(
+            Ok(Some(Entry {
+                term: 2,
+                command: Some(vec![0x03])
+            })),
+            l.get(3)
+        );
+        assert_eq!(Ok(None), l.get(4));
+        assert_eq!((3, 2), l.get_last());
+    }
+
+    #[test]
+    fn truncate_committed() {
+        let (mut l, _) = setup();
+        setup_appends(&mut l);
+        l.commit(2).unwrap();
+
+        assert_matches!(l.truncate(1), Err(Error::Value(_)));
+        assert_eq!(l.truncate(2), Ok(2));
+    }
+
+    #[test]
+    fn truncate_zero() {
+        let (mut l, _) = setup();
+        setup_appends(&mut l);
+
+        assert_eq!(Ok(0), l.truncate(0));
+        assert_eq!(Ok(None), l.get(1));
+        assert_eq!(Ok(None), l.get(2));
+        assert_eq!(Ok(None), l.get(3));
+        assert_eq!((0, 0), l.get_last());
     }
 }

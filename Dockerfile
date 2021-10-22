@@ -5,7 +5,7 @@ ARG TARGET=x86_64-unknown-linux-musl
 RUN apt-get -q update && apt-get -q install -y musl-dev protobuf-compiler
 RUN rustup target add $TARGET
 
-# FIXME: cargo does not have an option to only build dependencies, so we build
+# TODO: FIXME: cargo does not have an option to only build dependencies, so we build
 # a dummy main.rs. See: https://github.com/rust-lang/cargo/issues/2644
 WORKDIR /usr/src/node
 
