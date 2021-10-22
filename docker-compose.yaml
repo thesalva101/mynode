@@ -1,0 +1,70 @@
+version: "3.4"
+
+networks:
+  nodedb:
+    name: nodedb
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.20.0.0/24
+
+services:
+  node-a:
+    build: .
+    ports:
+      - 9601:9605
+    networks:
+      nodedb:
+        ipv4_address: 172.20.0.101
+    volumes:
+      - ./config/node-a.yaml:/etc/node.yaml
+      - ./tmp:/etc/node
+      - ./tmp/nodedb-a:/var/lib/nodedb
+
+  node-b:
+    build: .
+    ports:
+      - 9602:9605
+    networks:
+      nodedb:
+        ipv4_address: 172.20.0.102
+    volumes:
+      - ./config/node-b.yaml:/etc/node.yaml
+      - ./tmp:/etc/node
+      - ./tmp/nodedb-b:/var/lib/nodedb
+
+  node-c:
+    build: .
+    ports:
+      - 9603:9605
+    networks:
+      nodedb:
+        ipv4_address: 172.20.0.103
+    volumes:
+      - ./config/node-c.yaml:/etc/node.yaml
+      - ./tmp:/etc/node
+      - ./tmp/nodedb-c:/var/lib/nodedb
+
+  node-d:
+    build: .
+    ports:
+      - 9604:9605
+    networks:
+      nodedb:
+        ipv4_address: 172.20.0.104
+    volumes:
+      - ./config/node-d.yaml:/etc/node.yaml
+      - ./tmp:/etc/node
+      - ./tmp/nodedb-d:/var/lib/nodedb
+
+  node-e:
+    build: .
+    ports:
+      - 9605:9605
+    networks:
+      nodedb:
+        ipv4_address: 172.20.0.105
+    volumes:
+      - ./config/node-e.yaml:/etc/node.yaml
+      - ./tmp:/etc/node
+      - ./tmp/nodedb-e:/var/lib/nodedb

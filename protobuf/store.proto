@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+// The main Rpc service used by clients.
+service StoreService {
+  // Status asks the server for its status.
+  rpc Status(StatusRequest) returns (StatusResponse) {};
+
+  // Get a value from store
+  rpc Get(GetRequest) returns (GetResponse) {};
+
+  // Set a value to the store
+  rpc Set(SetRequest) returns (SetResponse) {};
+};
+
+message StatusRequest {};
+
+message StatusResponse {
+  string id = 1;
+  string version = 2;
+  int64 time = 3;
+};
+
+message GetRequest {
+  string key = 1;
+};
+
+message GetResponse {
+  string key = 1;
+  string value = 2;
+};
+
+message SetRequest {
+  string key = 1;
+  string value = 2;
+};
+
+message SetResponse {
+  string key = 1;
+  string value = 2;
+};

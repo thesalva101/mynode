@@ -1,0 +1,5 @@
+id: node-local
+listen: 0.0.0.0:9625
+threads: 4
+peers: {}
+data_dir: ./tmp/nodedb-local

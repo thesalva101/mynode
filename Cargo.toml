@@ -1,0 +1,29 @@
+[package]
+name = "mynode"
+version = "0.1.0"
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+clap = "2.33.3"
+config = "~0.11.0"
+crossbeam-channel = "~0.3"
+grpc = "~0.6.1"
+log = "~0.4.14"
+protobuf = "~2.8.0"
+rand = "~0.8.4"
+rmp-serde = "0.15.5"
+simplelog = "~0.10.2"
+serde = "~1.0.130"
+serde_derive = "~1.0.130"
+uuid = { version = "0.8", features = ["v4"] }
+
+httpbis = "~0.7.0"
+
+[build-dependencies]
+protoc-rust-grpc = "~0.6.2"
+
+[dev-dependencies]
+assert_matches = "~1.5.0"
+tempfile = "~3.2.0"
