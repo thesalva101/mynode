@@ -56,7 +56,7 @@ impl Message {
             )));
         }
 
-        // Ignore mesages to peers or local client
+        // Ignore messages to peers or local client
         if let Some(to) = &self.to {
             if to != node_id {
                 return Err(Error::Network(format!(
@@ -84,7 +84,7 @@ pub enum Event {
         commit_index: u64,
         /// If false the follower does not have the entry at commit_index
         /// and wants the leader to replicate it.
-        has_commited: bool,
+        has_committed: bool,
     },
     /// Candidates solicit votes from all other peers
     SolicitVote {
