@@ -80,6 +80,7 @@ impl Log {
         Ok(index)
     }
 
+    /// Commits entries up to and including an index
     pub fn commit(&mut self, mut index: u64) -> Result<u64, Error> {
         index = std::cmp::min(index, self.last_index);
         index = std::cmp::max(index, self.commit_index);
@@ -253,7 +254,7 @@ impl Log {
     /// Fetches a range of entries
     // TODO: FIXME Should take all kinds of ranges (generic over std::ops::RangeBounds),
     // and use kv::Store.range() once implemented.
-    pub fn range_from(&self, range: std::ops::RangeFrom<u64>) -> Result<Vec<Entry>, Error> {
+    pub fn range(&self, range: std::ops::RangeFrom<u64>) -> Result<Vec<Entry>, Error> {
         let mut entries = Vec::new();
         for i in range.start..=self.last_index {
             if let Some(entry) = self.get(i)? {
@@ -945,7 +946,7 @@ mod tests {
                     command: Some(vec![0x03])
                 },
             ]),
-            l.range_from(0..)
+            l.range(0..)
         );
 
         assert_eq!(
@@ -959,10 +960,10 @@ mod tests {
                     command: Some(vec![0x03])
                 },
             ]),
-            l.range_from(2..)
+            l.range(2..)
         );
 
-        assert_eq!(Ok(vec![]), l.range_from(4..));
+        assert_eq!(Ok(vec![]), l.range(4..));
     }
 
     #[test]

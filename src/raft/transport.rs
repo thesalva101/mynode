@@ -130,7 +130,7 @@ pub enum Event {
         /// The call ID
         call_id: Vec<u8>,
         /// The command response
-        respone: Vec<u8>,
+        response: Vec<u8>,
     },
     /// Reads from the state machine
     RespondError {
