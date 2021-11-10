@@ -319,10 +319,7 @@ mod tests {
 
         assert!(timeout > 0);
         for i in 0..timeout {
-            assert_node(&node)
-                .is_candidate()
-                .term(3)
-                .applied(if i > 0 { 2 } else { 1 });
+            assert_node(&node).is_candidate().term(3).applied(1); // TODO: confirm it's the desired effect
             node = node.tick().unwrap();
         }
         assert_node(&node).is_candidate().term(4);
