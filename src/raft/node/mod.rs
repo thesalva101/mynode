@@ -8,8 +8,10 @@ use super::{
     State,
 };
 
+mod candidate;
 mod follower;
 
+use candidate::Candidate;
 use follower::Follower;
 
 /// The interval between leader heartbeats, in ticks.
@@ -20,25 +22,6 @@ const ELECTION_TIMEOUT_MIN: u64 = 8 * HEARTBEAT_INTERVAL;
 
 /// The maximum election timeout, in ticks.
 const ELECTION_TIMEOUT_MAX: u64 = 15 * HEARTBEAT_INTERVAL;
-
-#[derive(Debug)]
-struct Candidate;
-
-impl Candidate {
-    pub fn new() -> Self {
-        todo!("impl")
-    }
-}
-
-impl RoleNode<Candidate> {
-    pub fn step(mut self, mut msg: Message) -> Result<Node, Error> {
-        todo!("impl")
-    }
-
-    pub fn tick(self) -> Result<Node, Error> {
-        todo!("impl")
-    }
-}
 
 #[derive(Debug)]
 struct Leader;
@@ -56,6 +39,10 @@ impl RoleNode<Leader> {
 
     pub fn tick(self) -> Result<Node, Error> {
         todo!("impl")
+    }
+
+    pub fn append(&self, s: Option<String>) -> Result<Node, Error> {
+        todo!("impl");
     }
 }
 

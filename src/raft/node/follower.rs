@@ -37,12 +37,7 @@ impl RoleNode<Follower> {
     fn become_candidate(self) -> Result<RoleNode<Candidate>, Error> {
         info!("Starting election for term {}", self.term + 1);
         let mut node = self.become_role(Candidate::new())?;
-        node.save_term(node.term + 1, None)?;
-        let (last_index, last_term) = node.log.get_last();
-        node.broadcast(Event::SolicitVote {
-            last_index,
-            last_term,
-        })?;
+        node.init()?;
         Ok(node)
     }
 
