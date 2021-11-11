@@ -17,6 +17,7 @@ mod handlers;
 mod proto;
 mod raft;
 mod serializer;
+mod sql;
 mod state;
 mod store;
 
