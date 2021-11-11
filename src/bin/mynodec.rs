@@ -30,7 +30,7 @@ fn main() -> Result<(), mynode::Error> {
         opts.value_of("host").unwrap(),
         opts.value_of("port").unwrap()
     )
-    .parse::<std::net::SocketAddr>()?;
+        .parse::<std::net::SocketAddr>()?;
 
     let client = mynode::Client::new(sa)?;
     let mut editor = rustyline::Editor::<()>::new();
@@ -43,8 +43,13 @@ fn main() -> Result<(), mynode::Error> {
             Err(ReadlineError::Eof) | Err(ReadlineError::Interrupted) => break,
             Err(err) => return Err(err.into()),
         };
-        let result = client.echo(&query)?;
-        println!("{}", result);
+
+        let mut resultset = client.query(&query)?;
+        println!("{}", resultset.columns().join("|"));
+        while let Some(Ok(row)) = resultset.next() {
+            let formatted: Vec<String> = row.into_iter().map(|v| format!("{}", v)).collect();
+            println!("{}", formatted.join("|"));
+        }
     }
     Ok(())
 }

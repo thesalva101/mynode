@@ -1,11 +1,15 @@
+use std::{
+    sync::{Arc, Mutex},
+    time::{SystemTime, SystemTimeError, UNIX_EPOCH},
+};
+
+use grpc::{RequestOptions, StreamingResponse};
+
+use crate::proto::{QueryRequest, Row};
 use crate::{
     proto,
     store::{get_obj, set_obj, Store},
     Error,
-};
-use std::{
-    sync::{Arc, Mutex},
-    time::{SystemTime, SystemTimeError, UNIX_EPOCH},
 };
 
 pub struct StoreServiceImpl {
@@ -34,18 +38,6 @@ fn error_response<T: Send>(error: Box<dyn std::error::Error>) -> grpc::SingleRes
 }
 
 impl proto::StoreService for StoreServiceImpl {
-    fn echo(
-        &self,
-        _: grpc::RequestOptions,
-        req: proto::EchoRequest,
-    ) -> grpc::SingleResponse<proto::EchoResponse> {
-        let value = req.value.clone();
-        grpc::SingleResponse::completed(proto::EchoResponse {
-            value,
-            ..Default::default()
-        })
-    }
-
     fn status(
         &self,
         _: grpc::RequestOptions,
@@ -111,5 +103,9 @@ impl proto::StoreService for StoreServiceImpl {
             ..Default::default()
         };
         grpc::SingleResponse::completed(response)
+    }
+
+    fn query(&self, o: RequestOptions, p: QueryRequest) -> StreamingResponse<Row> {
+        todo!()
     }
 }
