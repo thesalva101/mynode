@@ -1,11 +1,12 @@
 pub mod store;
+pub mod store_raft;
 
 mod raft;
 
 use std::collections::HashMap;
 
 use crate::error::Error;
-// use crate::handlers::store::StoreServiceImpl;
+use crate::handlers::store_raft::StoreRaftServiceImpl;
 use crate::proto;
 use crate::raft::Raft;
 use crate::state::State;
@@ -54,14 +55,12 @@ impl Node {
             raft_transport,
         )?;
 
-        // let file = std::fs::OpenOptions::new()
-        //     .read(true)
-        //     .write(true)
-        //     .create(true)
-        //     .open(data_path.join("state"))?;
-        // server.add_service(proto::StoreServiceServer::new_service_def(
-        //     StoreServiceImpl::new(self.id.clone(), File::new(file)?),
-        // ));
+        server.add_service(proto::StoreServiceServer::new_service_def(
+            StoreRaftServiceImpl {
+                id: self.id.clone(),
+                raft: raft.clone(),
+            },
+        ));
         let _s = server.build()?;
 
         raft.join()
