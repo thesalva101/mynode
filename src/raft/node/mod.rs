@@ -10,9 +10,11 @@ use super::{
 
 mod candidate;
 mod follower;
+mod leader;
 
 use candidate::Candidate;
 use follower::Follower;
+use leader::Leader;
 
 /// The interval between leader heartbeats, in ticks.
 const HEARTBEAT_INTERVAL: u64 = 1;
@@ -22,29 +24,6 @@ const ELECTION_TIMEOUT_MIN: u64 = 8 * HEARTBEAT_INTERVAL;
 
 /// The maximum election timeout, in ticks.
 const ELECTION_TIMEOUT_MAX: u64 = 15 * HEARTBEAT_INTERVAL;
-
-#[derive(Debug)]
-struct Leader;
-
-impl Leader {
-    pub fn new(peers: Vec<String>, last_index: u64) -> Self {
-        todo!("impl")
-    }
-}
-
-impl RoleNode<Leader> {
-    pub fn step(mut self, mut msg: Message) -> Result<Node, Error> {
-        todo!("impl")
-    }
-
-    pub fn tick(self) -> Result<Node, Error> {
-        todo!("impl")
-    }
-
-    pub fn append(&self, s: Option<String>) -> Result<Node, Error> {
-        todo!("impl");
-    }
-}
 
 /// The local Raft node state machine.
 #[derive(Debug)]
@@ -195,6 +174,8 @@ impl<R> RoleNode<R> {
 
 #[cfg(test)]
 mod tests {
+    use crate::store::KVMemory;
+
     pub use super::super::tests::*;
     use super::follower::tests::{follower_leader, follower_voted_for};
     use super::*;
@@ -335,11 +316,206 @@ mod tests {
         NodeAsserter::new(node)
     }
 
-    pub fn assert_messages(rx: &Receiver<Message>, msgs: Vec<Message>) {
-        let mut actual = Vec::new();
-        while !rx.is_empty() {
-            actual.push(rx.recv().unwrap());
+    fn setup_rolenode() -> (RoleNode<()>, Receiver<Message>) {
+        setup_rolenode_peers(vec!["b".into(), "c".into()])
+    }
+
+    fn setup_rolenode_peers(peers: Vec<String>) -> (RoleNode<()>, Receiver<Message>) {
+        let (sender, receiver) = crossbeam_channel::unbounded();
+        let node = RoleNode {
+            role: (),
+            id: "a".into(),
+            peers,
+            term: 1,
+            log: Log::new(KVMemory::new()).unwrap(),
+            state: TestState::new().boxed(),
+            sender,
+        };
+        (node, receiver)
+    }
+
+    #[test]
+    fn new() {
+        let (sender, _) = crossbeam_channel::unbounded();
+        let node = Node::new(
+            "a",
+            vec!["b".into(), "c".into()],
+            KVMemory::new(),
+            TestState::new(),
+            sender,
+        )
+        .unwrap();
+        match node {
+            Node::Follower(rolenode) => {
+                assert_eq!(rolenode.id, "a".to_owned());
+                assert_eq!(rolenode.term, 0);
+                assert_eq!(rolenode.peers, vec!["b".to_owned(), "c".to_owned()]);
+            }
+            _ => panic!("Expected node to start as follower"),
         }
-        assert_eq!(msgs, actual);
+    }
+
+    #[test]
+    fn new_loads_term() {
+        let (sender, _) = crossbeam_channel::unbounded();
+        let store = KVMemory::new();
+        Log::new(store.clone())
+            .unwrap()
+            .save_term(3, Some("c"))
+            .unwrap();
+        let node = Node::new(
+            "a",
+            vec!["b".into(), "c".into()],
+            store,
+            TestState::new(),
+            sender,
+        )
+        .unwrap();
+        match node {
+            Node::Follower(rolenode) => assert_eq!(rolenode.term, 3),
+            _ => panic!("Expected node to start as follower"),
+        }
+    }
+
+    #[test]
+    fn new_single() {
+        let (sender, _) = crossbeam_channel::unbounded();
+        let node = Node::new(
+            "a",
+            vec![],
+            KVMemory::new(),
+            crate::state::State::new(KVMemory::new()),
+            sender,
+        )
+        .unwrap();
+        match node {
+            Node::Leader(rolenode) => {
+                assert_eq!(rolenode.id, "a".to_owned());
+                assert_eq!(rolenode.term, 0);
+                assert!(rolenode.peers.is_empty());
+            }
+            _ => panic!("Expected leader"),
+        }
+    }
+
+    #[test]
+    fn become_role() {
+        let (node, _) = setup_rolenode();
+        let new = node.become_role("role").unwrap();
+        assert_eq!(new.id, "a".to_owned());
+        assert_eq!(new.term, 1);
+        assert_eq!(new.peers, vec!["b".to_owned(), "c".to_owned()]);
+        assert_eq!(new.role, "role");
+    }
+
+    #[test]
+    fn broadcast() {
+        let (node, rx) = setup_rolenode();
+        node.broadcast(Event::Heartbeat {
+            commit_index: 1,
+            commit_term: 1,
+        })
+        .unwrap();
+
+        for to in ["b", "c"].iter().cloned() {
+            assert!(!rx.is_empty());
+            assert_eq!(
+                rx.recv().unwrap(),
+                Message {
+                    from: Some("a".into()),
+                    to: Some(to.into()),
+                    term: 1,
+                    event: Event::Heartbeat {
+                        commit_index: 1,
+                        commit_term: 1
+                    },
+                },
+            )
+        }
+        assert!(rx.is_empty());
+    }
+
+    #[test]
+    fn normalize_message() {
+        let (node, _) = setup_rolenode();
+        let mut msg = Message {
+            from: None,
+            to: None,
+            term: 0,
+            event: Event::ReadState {
+                call_id: vec![],
+                command: vec![],
+            },
+        };
+        assert!(node.normalize_message(&mut msg));
+        assert_eq!(
+            msg,
+            Message {
+                from: None,
+                to: Some("a".into()),
+                term: 1,
+                event: Event::ReadState {
+                    call_id: vec![],
+                    command: vec![]
+                },
+            }
+        );
+
+        msg.to = Some("c".into());
+        assert!(!node.normalize_message(&mut msg));
+    }
+
+    #[test]
+    fn quorum() {
+        let quorums = vec![
+            (1, 1),
+            (2, 2),
+            (3, 2),
+            (4, 3),
+            (5, 3),
+            (6, 4),
+            (7, 4),
+            (8, 5),
+        ];
+        for (size, quorum) in quorums.into_iter() {
+            let peers: Vec<String> = (0..(size as u8 - 1))
+                .map(|i| (i as char).to_string())
+                .collect();
+            assert_eq!(peers.len(), size as usize - 1);
+            let (node, _) = setup_rolenode_peers(peers);
+            assert_eq!(node.quorum(), quorum);
+        }
+    }
+
+    #[test]
+    fn send() {
+        let (node, rx) = setup_rolenode();
+        node.send(
+            Some("b"),
+            Event::Heartbeat {
+                commit_index: 1,
+                commit_term: 1,
+            },
+        )
+        .unwrap();
+        assert_messages(
+            &rx,
+            vec![Message {
+                from: Some("a".into()),
+                to: Some("b".into()),
+                term: 1,
+                event: Event::Heartbeat {
+                    commit_index: 1,
+                    commit_term: 1,
+                },
+            }],
+        );
+    }
+
+    #[test]
+    fn save_term() {
+        let (mut node, _) = setup_rolenode();
+        node.save_term(4, Some("b")).unwrap();
+        assert_eq!(node.log.load_term().unwrap(), (4, Some("b".into())));
     }
 }

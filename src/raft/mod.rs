@@ -106,4 +106,12 @@ pub mod tests {
             ])
         }
     }
+
+    pub fn assert_messages(rx: &Receiver<Message>, msgs: Vec<Message>) {
+        let mut actual = Vec::new();
+        while !rx.is_empty() {
+            actual.push(rx.recv().unwrap());
+        }
+        assert_eq!(msgs, actual);
+    }
 }

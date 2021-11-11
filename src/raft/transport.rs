@@ -32,9 +32,11 @@ pub struct Message {
 impl Message {
     /// Normalizes a message by setting to and term for local messages
     pub fn normalize(&mut self, node_id: &str, term: u64) {
-        self.to = Some(node_id.into());
-        if self.term == 0 {
-            self.term = term;
+        if self.from.is_none() && self.to.is_none() {
+            self.to = Some(node_id.to_owned());
+            if self.term == 0 {
+                self.term = term;
+            }
         }
     }
 
@@ -203,7 +205,7 @@ mod tests {
             msg,
             Message {
                 from: Some("bob".into()),
-                to: Some("charlie".into()),
+                to: Some("alice".into()),
                 term: 3,
                 event: Event::Heartbeat {
                     commit_index: 1,
