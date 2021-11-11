@@ -10,8 +10,9 @@ RUN rustup target add $TARGET
 WORKDIR /usr/src/node
 
 COPY Cargo.toml Cargo.lock ./
-RUN mkdir src \
+RUN mkdir src && mkdir src/bin \
     && echo "fn main() {}" >src/main.rs \
+    && echo "fn main() {}" >src/bin/node.rs \
     && echo "fn main() {}" >build.rs
 RUN cargo fetch --target=$TARGET
 RUN cargo build --release --target=$TARGET \
