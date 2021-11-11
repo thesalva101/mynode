@@ -12,7 +12,6 @@ extern crate serde;
 
 mod error;
 mod handlers;
-mod node;
 mod proto;
 mod raft;
 mod serializer;
@@ -20,4 +19,4 @@ mod state;
 mod store;
 
 pub use error::Error;
-pub use node::Node;
+pub use handlers::Node;

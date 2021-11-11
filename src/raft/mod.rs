@@ -3,14 +3,15 @@ mod node;
 mod state;
 mod transport;
 
-use std::collections::HashMap;
-
-use crossbeam_channel::{Receiver, Sender};
-pub use state::State;
+pub use self::log::Entry;
+pub use self::state::State;
+pub use self::transport::{Event, Message, Transport};
 
 use crate::{store, Error};
-
-use self::transport::{Event, Message, Transport};
+use crossbeam_channel::{Receiver, Sender};
+use node::Node;
+use std::collections::HashMap;
+use uuid::Uuid;
 
 /// The duration of a Raft tick, which is the unit of time for e.g.
 /// heartbeat intervals and election timeouts.
@@ -39,14 +40,103 @@ impl Raft {
         let ticker = crossbeam_channel::tick(TICK);
 
         let inbound_rx = transport.receiver();
-        let (outbound_tx, outbound_rx) = crossbeam_channel::unbounded::<(Event, Sender<Message>)>();
+        let (outbound_tx, outbound_rx) = crossbeam_channel::unbounded();
         let (call_tx, call_rx) = crossbeam_channel::unbounded::<(Event, Sender<Event>)>();
         let (join_tx, join_rx) = crossbeam_channel::unbounded();
-
         let mut response_txs: HashMap<Vec<u8>, Sender<Event>> = HashMap::new();
-        // let mut node = Node::new(id, peers, store, state, outbound_tx)?;
+        let mut node = Node::new(id, peers, store, state, outbound_tx)?;
+
+        // TODO: revisit this
+        std::thread::spawn(move || {
+            // Ugly workaround to use ?, while waiting for try_blocks:
+            // https://doc.rust-lang.org/unstable-book/language-features/try-blocks.html
+            let result = (move || loop {
+                select! {
+                    // Handle ticks
+                    recv(ticker) -> _ => node = node.tick()?,
+
+                    // Handle local method calls
+                    recv(call_rx) -> recv => {
+                        let (event, response_tx) = recv?;
+                        if let Some(call_id) = event.call_id() {
+                            response_txs.insert(call_id, response_tx);
+                            node = node.step(Message{from: None, to: None, term: 0, event})?;
+                        } else {
+                            response_tx.send(Event::RespondError{
+                                call_id: vec![],
+                                error: format!("Call ID not found for event {:?}", event),
+                            })?;
+                        }
+                    },
+
+                    // Handle inbound messages from peers
+                    recv(inbound_rx) -> recv => node = node.step(recv?)?,
+
+                    // Handle outbound messages from node, either to peers or a local method caller
+                    recv(outbound_rx) -> recv => {
+                        let msg = recv?;
+                        if msg.to.is_some() {
+                            transport.send(msg)?
+                        } else if let Some(call_id) = msg.event.call_id() {
+                            if let Some(response_tx) = response_txs.get(&call_id) {
+                                response_tx.send(msg.event)?;
+                            }
+                        }
+                    },
+                }
+            })();
+            join_tx.send(result).unwrap()
+        });
 
         Ok(Raft { call_tx, join_rx })
+    }
+
+    /// Waits for the Raft node to complete
+    pub fn join(&self) -> Result<(), Error> {
+        self.join_rx.recv()?
+    }
+
+    /// Runs a synchronous client call on the Raft cluster
+    fn call(&self, event: Event) -> Result<Event, Error> {
+        let (response_tx, response_rx) = crossbeam_channel::unbounded();
+        self.call_tx.send((event, response_tx))?;
+        match response_rx.recv()? {
+            Event::RespondError { error, .. } => Err(Error::Network(error)),
+            e => Ok(e),
+        }
+    }
+
+    /// Generates a call ID
+    fn call_id() -> Vec<u8> {
+        Uuid::new_v4().as_bytes().to_vec()
+    }
+
+    /// Mutates the Raft state machine.
+    pub fn mutate(&self, command: Vec<u8>) -> Result<Vec<u8>, Error> {
+        match self.call(Event::MutateState {
+            call_id: Self::call_id(),
+            command,
+        })? {
+            Event::RespondState { response, .. } => Ok(response),
+            event => Err(Error::Internal(format!(
+                "Unexpected Raft mutate response {:?}",
+                event
+            ))),
+        }
+    }
+
+    /// Reads from the Raft state machine.
+    pub fn read(&self, command: Vec<u8>) -> Result<Vec<u8>, Error> {
+        match self.call(Event::ReadState {
+            call_id: Self::call_id(),
+            command,
+        })? {
+            Event::RespondState { response, .. } => Ok(response),
+            event => Err(Error::Internal(format!(
+                "Unexpected Raft read response {:?}",
+                event
+            ))),
+        }
     }
 }
 
