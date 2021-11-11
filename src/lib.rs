@@ -8,8 +8,10 @@ extern crate crossbeam_channel;
 extern crate log;
 extern crate httpbis;
 extern crate rmp_serde as rmps;
+extern crate rustyline;
 extern crate serde;
 
+mod client;
 mod error;
 mod handlers;
 mod proto;
@@ -18,5 +20,6 @@ mod serializer;
 mod state;
 mod store;
 
+pub use client::Client;
 pub use error::Error;
 pub use handlers::Node;

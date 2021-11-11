@@ -24,6 +24,7 @@ impl Transport for GRPC {
     fn send(&self, msg: Message) -> Result<(), Error> {
         if let Some(to) = &msg.to {
             if let Some(client) = self.peers.get(to) {
+                // TODO: FIXME Needs to check the response.
                 client.step(grpc::RequestOptions::new(), message_to_protobuf(msg));
                 Ok(())
             } else {
@@ -35,6 +36,7 @@ impl Transport for GRPC {
     }
 }
 
+// TODO: revisit this
 impl GRPC {
     /// Creates a new GRPC transport
     pub fn new(peers: HashMap<String, std::net::SocketAddr>) -> Result<Self, Error> {

@@ -50,6 +50,9 @@ impl RoleNode<Candidate> {
 
     /// Processes a logical clock tick.
     pub fn tick(mut self) -> Result<Node, Error> {
+        // apply pending entries during candidate ticks
+        while let Some(_) = self.log.apply(&mut self.state)? {}
+
         // If the election times out, start a new one for the next term.
         self.role.election_ticks += 1;
         if self.role.election_ticks >= self.role.election_timeout {
@@ -319,7 +322,10 @@ mod tests {
 
         assert!(timeout > 0);
         for i in 0..timeout {
-            assert_node(&node).is_candidate().term(3).applied(1); // TODO: confirm it's the desired effect
+            assert_node(&node)
+                .is_candidate()
+                .term(3)
+                .applied(if i > 0 { 2 } else { 1 });
             node = node.tick().unwrap();
         }
         assert_node(&node).is_candidate().term(4);

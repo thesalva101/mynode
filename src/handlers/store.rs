@@ -34,6 +34,18 @@ fn error_response<T: Send>(error: Box<dyn std::error::Error>) -> grpc::SingleRes
 }
 
 impl proto::StoreService for StoreServiceImpl {
+    fn echo(
+        &self,
+        _: grpc::RequestOptions,
+        req: proto::EchoRequest,
+    ) -> grpc::SingleResponse<proto::EchoResponse> {
+        let value = req.value.clone();
+        grpc::SingleResponse::completed(proto::EchoResponse {
+            value,
+            ..Default::default()
+        })
+    }
+
     fn status(
         &self,
         _: grpc::RequestOptions,
