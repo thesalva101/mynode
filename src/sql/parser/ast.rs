@@ -49,6 +49,20 @@ pub enum Literal {
 /// Operations (done by operators)
 #[derive(Clone, Debug, PartialEq)]
 pub enum Operation {
+    // Logical operators
+    And(Box<Expression>, Box<Expression>),
+    Not(Box<Expression>),
+    Or(Box<Expression>, Box<Expression>),
+
+    // Comparison operators
+    CompareEQ(Box<Expression>, Box<Expression>),
+    CompareGT(Box<Expression>, Box<Expression>),
+    CompareGTE(Box<Expression>, Box<Expression>),
+    CompareLT(Box<Expression>, Box<Expression>),
+    CompareLTE(Box<Expression>, Box<Expression>),
+    CompareNE(Box<Expression>, Box<Expression>),
+
+    // Mathematical operators
     Add(Box<Expression>, Box<Expression>),
     Divide(Box<Expression>, Box<Expression>),
     Exponentiate(Box<Expression>, Box<Expression>),

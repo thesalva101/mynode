@@ -19,8 +19,14 @@ pub enum Token {
     Equals,
     /// The greater-than symbol >
     GreaterThan,
+    /// The greater-than or equal to symbol >=
+    GreaterThanOrEqual,
     /// The less-than symbol <
     LessThan,
+    /// The less-than or equal to symbol <=
+    LessThanOrEqual,
+    /// ??? simply not equal? !=
+    LessOrGreaterThan,
     /// The addition symbol +
     Plus,
     /// The subtraction symbol -
@@ -35,6 +41,8 @@ pub enum Token {
     Percent,
     /// The factorial or not symbol !
     Exclamation,
+    /// The not equal symbol !=
+    NotEqual,
     /// The query parameter marker ?
     Question,
     /// An opening parenthesis
@@ -55,7 +63,10 @@ impl std::fmt::Display for Token {
             Token::Period => ".",
             Token::Equals => "=",
             Token::GreaterThan => ">",
+            Token::GreaterThanOrEqual => ">=",
             Token::LessThan => "<",
+            Token::LessThanOrEqual => "<=",
+            Token::LessOrGreaterThan => "<>",
             Token::Plus => "+",
             Token::Minus => "-",
             Token::Asterisk => "*",
@@ -63,6 +74,7 @@ impl std::fmt::Display for Token {
             Token::Caret => "^",
             Token::Percent => "%",
             Token::Exclamation => "!",
+            Token::NotEqual => "!=",
             Token::Question => "?",
             Token::OpenParen => "(",
             Token::CloseParen => ")",
@@ -80,9 +92,12 @@ impl From<Keyword> for Token {
 /// Lexer keywords
 #[derive(Clone, Debug, PartialEq)]
 pub enum Keyword {
+    And,
     As,
     False,
+    Not,
     Null,
+    Or,
     Select,
     True,
 }
@@ -91,8 +106,11 @@ impl Keyword {
     fn from_str(ident: &str) -> Option<Self> {
         Some(match ident.to_uppercase().as_ref() {
             "AS" => Self::As,
+            "AND" => Self::And,
             "FALSE" => Self::False,
+            "NOT" => Self::Not,
             "NULL" => Self::Null,
+            "OR" => Self::Or,
             "SELECT" => Self::Select,
             "TRUE" => Self::True,
             _ => return None,
@@ -102,8 +120,11 @@ impl Keyword {
     fn to_str(&self) -> &str {
         match self {
             Self::As => "AS",
+            Self::And => "AND",
             Self::False => "FALSE",
+            Self::Not => "NOT",
             Self::Null => "NULL",
+            Self::Or => "OR",
             Self::Select => "SELECT",
             Self::True => "TRUE",
         }
@@ -238,7 +259,8 @@ impl<'a> Lexer<'a> {
         Ok(Some(Token::String(s)))
     }
 
-    /// Scans the input for the next symbol token, if any
+    /// Scans the input for the next symbol token, if any, and
+    /// handle any multi-symbol tokens
     fn scan_symbol(&mut self) -> Option<Token> {
         self.next_if_token(|c| match c {
             '.' => Some(Token::Period),
@@ -257,6 +279,32 @@ impl<'a> Lexer<'a> {
             ')' => Some(Token::CloseParen),
             ',' => Some(Token::Comma),
             _ => None,
+        })
+        .map(|token| match token {
+            Token::Exclamation => {
+                if self.next_if(|c| c == '=').is_some() {
+                    Token::NotEqual
+                } else {
+                    token
+                }
+            }
+            Token::LessThan => {
+                if self.next_if(|c| c == '>').is_some() {
+                    Token::LessOrGreaterThan
+                } else if self.next_if(|c| c == '=').is_some() {
+                    Token::LessThanOrEqual
+                } else {
+                    token
+                }
+            }
+            Token::GreaterThan => {
+                if self.next_if(|c| c == '=').is_some() {
+                    Token::GreaterThanOrEqual
+                } else {
+                    token
+                }
+            }
+            _ => token,
         })
     }
 }
