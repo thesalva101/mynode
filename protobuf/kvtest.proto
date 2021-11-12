@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+import "protobuf/common.proto";
+
+// A simple KV Test Service
+service KvTestService {
+  // Status asks the server for its status.
+  rpc Status(StatusRequest) returns (StatusResponse) {};
+
+  // Get a value from store
+  rpc Get(GetRequest) returns (GetResponse) {};
+
+  // Set a value to the store
+  rpc Set(SetRequest) returns (SetResponse) {};
+};
+
+message GetRequest {
+  string key = 1;
+};
+
+message GetResponse {
+  string key = 1;
+  string value = 2;
+};
+
+message SetRequest {
+  string key = 1;
+  string value = 2;
+};
+
+message SetResponse {
+  string key = 1;
+  string value = 2;
+};

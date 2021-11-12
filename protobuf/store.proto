@@ -1,5 +1,7 @@
 syntax = "proto3";
 
+import "protobuf/common.proto";
+
 // The main Rpc service used by clients.
 service StoreService {
   // Status asks the server for its status.
@@ -10,20 +12,6 @@ service StoreService {
   
   // GetTable fetches the schema for a table
   rpc GetTable(GetTableRequest) returns (GetTableResponse) {};
-
-  // Get a value from store
-  rpc Get(GetRequest) returns (GetResponse) {};
-
-  // Set a value to the store
-  rpc Set(SetRequest) returns (SetResponse) {};
-};
-
-message StatusRequest {};
-
-message StatusResponse {
-  string id = 1;
-  string version = 2;
-  int64 time = 3;
 };
 
 message QueryRequest {
@@ -41,25 +29,6 @@ message Field {
     double float = 3;
     string string = 4;
   }
-};
-
-message GetRequest {
-  string key = 1;
-};
-
-message GetResponse {
-  string key = 1;
-  string value = 2;
-};
-
-message SetRequest {
-  string key = 1;
-  string value = 2;
-};
-
-message SetResponse {
-  string key = 1;
-  string value = 2;
 };
 
 message GetTableRequest {

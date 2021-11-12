@@ -1,12 +1,12 @@
+pub mod kvtest;
 pub mod store;
-pub mod store_raft;
 
 mod raft;
 
 use std::collections::HashMap;
 
 use crate::error::Error;
-use crate::handlers::store_raft::StoreRaftServiceImpl;
+use crate::handlers::store::StoreServiceImpl;
 use crate::proto;
 use crate::raft::Raft;
 use crate::sql::Storage;
@@ -57,7 +57,7 @@ impl Node {
         )?;
 
         server.add_service(proto::StoreServiceServer::new_service_def(
-            StoreRaftServiceImpl {
+            StoreServiceImpl {
                 id: self.id.clone(),
                 raft: raft.clone(),
                 storage: Box::new(Storage::new(KVMemory::new())),

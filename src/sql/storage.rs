@@ -1,8 +1,8 @@
 use super::schema;
+use crate::serializer::deserialize;
 use crate::serializer::serialize;
 use crate::store::Store;
 use crate::Error;
-use crate::{serializer::deserialize, store};
 use std::sync::{Arc, RwLock};
 
 #[derive(Clone)]

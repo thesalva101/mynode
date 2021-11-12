@@ -31,8 +31,7 @@ pub fn set_obj<V: serde::Serialize>(
 ) -> Result<(), Error> {
     let mut buffer = Vec::new();
     value.serialize(&mut rmps::Serializer::new(&mut buffer))?;
-    store.set(key, buffer);
-    Ok(())
+    store.set(key, buffer)
 }
 
 #[cfg(test)]

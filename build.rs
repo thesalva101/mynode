@@ -1,7 +1,12 @@
 extern crate protoc_rust_grpc;
 
 fn main() {
-    let protobuf_sources = &["protobuf/raft.proto", "protobuf/store.proto"];
+    let protobuf_sources = &[
+        "protobuf/common.proto",
+        "protobuf/raft.proto",
+        "protobuf/store.proto",
+        "protobuf/kvtest.proto",
+    ];
 
     // Generate Protobuf shims
     protoc_rust_grpc::run(protoc_rust_grpc::Args {

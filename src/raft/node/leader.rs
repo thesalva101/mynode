@@ -147,7 +147,7 @@ impl RoleNode<Leader> {
         Ok(())
     }
 
-    pub fn step(mut self, mut msg: Message) -> Result<Node, Error> {
+    pub fn step(self, mut msg: Message) -> Result<Node, Error> {
         if !self.normalize_message(&mut msg) {
             return Ok(self.into());
         }

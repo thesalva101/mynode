@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+message StatusRequest {};
+
+message StatusResponse {
+  string id = 1;
+  string version = 2;
+  int64 time = 3;
+};

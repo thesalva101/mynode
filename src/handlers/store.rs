@@ -1,35 +1,18 @@
-use std::{
-    sync::{Arc, Mutex},
-    time::{SystemTime, SystemTimeError, UNIX_EPOCH},
-};
+use std::time::{SystemTime, SystemTimeError, UNIX_EPOCH};
 
 use grpc::{RequestOptions, StreamingResponse};
 
-use crate::proto::{QueryRequest, Row};
-use crate::{
-    proto,
-    store::{get_obj, set_obj, Store},
-    Error,
-};
+use crate::proto;
+use crate::proto::QueryRequest;
+use crate::raft::Raft;
+use crate::serializer::serialize;
+use crate::sql::types::{Row, Value};
+use crate::sql::{Parser, Planner, Storage};
 
 pub struct StoreServiceImpl {
-    id: String,
-    store: Arc<Mutex<Box<dyn Store>>>,
-}
-
-impl StoreServiceImpl {
-    pub fn new<S: Store>(id: String, store: S) -> Self {
-        StoreServiceImpl {
-            id,
-            store: Arc::new(Mutex::new(Box::new(store))),
-        }
-    }
-
-    fn get_timestamp(&self) -> Result<i64, SystemTimeError> {
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|t| t.as_secs() as i64)
-    }
+    pub id: String,
+    pub raft: Raft,
+    pub storage: Box<Storage>,
 }
 
 fn error_response<T: Send>(error: Box<dyn std::error::Error>) -> grpc::SingleResponse<T> {
@@ -57,63 +40,61 @@ impl proto::StoreService for StoreServiceImpl {
         grpc::SingleResponse::completed(response)
     }
 
-    fn get(
-        &self,
-        _: grpc::RequestOptions,
-        req: proto::GetRequest,
-    ) -> grpc::SingleResponse<proto::GetResponse> {
-        let key = req.key.as_str();
-
-        let store_map = self.store.clone();
-        let store = store_map.lock().unwrap();
-
-        let value_opt = match get_obj(store.as_ref(), key) {
-            Ok(v) => v,
-            Err(e) => return error_response(e.into()),
-        };
-
-        let value = match value_opt {
-            Some(v) => v,
-            None => return error_response(Error::NotFound.into()),
-        };
-
-        let response = proto::GetResponse {
-            key: key.to_owned(),
-            value,
-            ..Default::default()
-        };
-        grpc::SingleResponse::completed(response)
-    }
-
-    fn set(
-        &self,
-        _: grpc::RequestOptions,
-        req: proto::SetRequest,
-    ) -> grpc::SingleResponse<proto::SetResponse> {
-        let store_map = self.store.clone();
-        let mut store = store_map.lock().unwrap();
-
-        if let Err(e) = set_obj(store.as_mut(), req.key.as_str(), req.value.clone()) {
-            return error_response(e.into());
-        }
-
-        let response = proto::SetResponse {
-            key: req.key,
-            value: req.value,
-            ..Default::default()
-        };
-        grpc::SingleResponse::completed(response)
-    }
-
-    fn query(&self, o: RequestOptions, p: QueryRequest) -> StreamingResponse<Row> {
-        todo!()
+    fn query(&self, _: RequestOptions, req: QueryRequest) -> StreamingResponse<proto::Row> {
+        let plan = Planner::new(self.storage.clone())
+            .build(Parser::new(&req.query).parse().unwrap())
+            .unwrap();
+        let mut metadata = grpc::Metadata::new();
+        metadata.add(
+            grpc::MetadataKey::from("columns"),
+            serialize(&plan.columns).unwrap().into(),
+        );
+        // TODO: FIXME This needs to handle errors
+        grpc::StreamingResponse::iter_with_metadata(
+            metadata,
+            plan.map(|row| Self::row_to_protobuf(row.unwrap())),
+        )
     }
 
     fn get_table(
         &self,
-        o: grpc::RequestOptions,
-        p: proto::GetTableRequest,
+        _: grpc::RequestOptions,
+        req: proto::GetTableRequest,
     ) -> grpc::SingleResponse<proto::GetTableResponse> {
-        todo!()
+        let schema = self.storage.get_table(&req.name).unwrap();
+        grpc::SingleResponse::completed(proto::GetTableResponse {
+            sql: schema.to_query(),
+            ..Default::default()
+        })
+    }
+}
+
+impl StoreServiceImpl {
+    fn get_timestamp(&self) -> Result<i64, SystemTimeError> {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|t| t.as_secs() as i64)
+    }
+
+    /// Converts a row into a protobuf row
+    fn row_to_protobuf(row: Row) -> proto::Row {
+        proto::Row {
+            field: row.into_iter().map(Self::value_to_protobuf).collect(),
+            ..Default::default()
+        }
+    }
+
+    /// Converts a value into a protobuf field
+    fn value_to_protobuf(value: Value) -> proto::Field {
+        proto::Field {
+            value: match value {
+                Value::Null => None,
+                Value::Boolean(b) => Some(proto::Field_oneof_value::boolean(b)),
+                Value::Float(f) => Some(proto::Field_oneof_value::float(f)),
+                Value::Integer(i) => Some(proto::Field_oneof_value::integer(i)),
+                Value::String(s) => Some(proto::Field_oneof_value::string(s)),
+            },
+            ..Default::default()
+        }
     }
 }
