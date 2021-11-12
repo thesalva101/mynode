@@ -1,3 +1,14 @@
+use serde_derive::{Deserialize, Serialize};
+
+/// A datatype
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub enum DataType {
+    Boolean,
+    Integer,
+    Float,
+    String,
+}
+
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
 /// A value
 pub enum Value {

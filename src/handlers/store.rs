@@ -108,4 +108,12 @@ impl proto::StoreService for StoreServiceImpl {
     fn query(&self, o: RequestOptions, p: QueryRequest) -> StreamingResponse<Row> {
         todo!()
     }
+
+    fn get_table(
+        &self,
+        o: grpc::RequestOptions,
+        p: proto::GetTableRequest,
+    ) -> grpc::SingleResponse<proto::GetTableResponse> {
+        todo!()
+    }
 }

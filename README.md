@@ -28,15 +28,16 @@ The nodes can be contacted on `localhost` ports `9601` to `9605`, e.g.:
 
 - [x] **Data Types:** Support for nulls, booleans, 64-bit integers, 64-bit floats, and UTF-8 strings up to 1 KB.
 
-- [ ] **Constraints:** Compulsory singluar primary keys, unique indexes, and foreign keys.
+- [ ] **Schemas:** Compulsory singluar primary keys, unique indexes, and foreign keys.
 
 - [ ] **Transactions:** MVCC-based serializable snapshot isolation.
 
-- [ ] **Query Engine:** Simple heuristic-based planner and optimizer supporting expressions, functions, and inner joins.
+- [ ] **Query Engine:** Self-written iterator-based engine with simple heuristic optimizer.
 
-- [ ] **Language:** Basic SQL support:
+- [ ] **Language:** Self-written SQL parser with support for:
 
-  - `[CREATE|DROP] TABLE ...` and `[CREATE|DROP] INDEX ...`
+  - `[CREATE|DROP] TABLE ...`
+  - `[CREATE|DROP] INDEX ...`
   - `BEGIN`, `COMMIT`, and `ROLLBACK`
   - `INSERT INTO ... (...) VALUES (...)`
   - `UPDATE ... SET ... WHERE ...`
@@ -62,8 +63,18 @@ Below is an incomplete list of known issues preventing this from being a "real" 
 
 - **Single node processing:** all operations (both reads and writes) are processed by a single Raft thread on a single node (the master), and the system consists of a single Raft cluster, preventing horizontal scalability and efficient resource utilization.
 
-* **Client call retries:** there is currently no retries of client-submitted operations, and if a node processing or proxying an operation changes role then the call is dropped.
+- **Client call retries:** there is currently no retries of client-submitted operations, and if a node processing or proxying an operation changes role then the call is dropped.
 
 - **State machine errors:** errors during state machine mutations currently crash the node - it may be beneficial to support user errors which simply skip the erroring log entry.
 
 - **Log replication optimization:** currently only the simplest version of the Raft log replication protocol is implemented, without snapshots or rapid log replay (i.e. replication of old log entries is retried one by one until a common base entry is found).
+
+### Schema
+
+- **Single database:** only a single, unnamed database is supported per ToyDB cluster.
+
+- **Schema changes:** schema changes other than creating or dropping tables and indexes is not supported, i.e. there is no `ALTER TABLE`.
+
+### Query Engine
+
+- **Type checking:** query type checking (e.g. `SELECT a + b` must receive two numbers) is done at query evaluation time, not at query compile time.

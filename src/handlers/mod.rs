@@ -9,8 +9,9 @@ use crate::error::Error;
 use crate::handlers::store_raft::StoreRaftServiceImpl;
 use crate::proto;
 use crate::raft::Raft;
+use crate::sql::Storage;
 use crate::state::State;
-use crate::store::File;
+use crate::store::{File, KVMemory};
 
 pub struct Node {
     pub id: String,
@@ -59,6 +60,7 @@ impl Node {
             StoreRaftServiceImpl {
                 id: self.id.clone(),
                 raft: raft.clone(),
+                storage: Box::new(Storage::new(KVMemory::new())),
             },
         ));
         let _s = server.build()?;

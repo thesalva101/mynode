@@ -6,7 +6,7 @@ use crate::proto::QueryRequest;
 use crate::raft::Raft;
 use crate::serializer::{deserialize, serialize};
 use crate::sql::types::{Row, Value};
-use crate::sql::{Parser, Plan};
+use crate::sql::{Parser, Planner, Storage};
 use crate::state::{Mutation, Read};
 use crate::{
     proto,
@@ -17,6 +17,7 @@ use crate::{
 pub struct StoreRaftServiceImpl {
     pub id: String,
     pub raft: Raft,
+    pub storage: Box<Storage>,
 }
 
 fn error_response<T: Send>(error: Box<dyn std::error::Error>) -> grpc::SingleResponse<T> {
@@ -82,7 +83,9 @@ impl proto::StoreService for StoreRaftServiceImpl {
     }
 
     fn query(&self, _: RequestOptions, req: QueryRequest) -> StreamingResponse<proto::Row> {
-        let plan = Plan::build(Parser::new(&req.query).parse().unwrap()).unwrap();
+        let plan = Planner::new(self.storage.clone())
+            .build(Parser::new(&req.query).parse().unwrap())
+            .unwrap();
         let mut metadata = grpc::Metadata::new();
         metadata.add(
             grpc::MetadataKey::from("columns"),
@@ -93,6 +96,18 @@ impl proto::StoreService for StoreRaftServiceImpl {
             metadata,
             plan.map(|row| Self::row_to_protobuf(row.unwrap())),
         )
+    }
+
+    fn get_table(
+        &self,
+        _: grpc::RequestOptions,
+        req: proto::GetTableRequest,
+    ) -> grpc::SingleResponse<proto::GetTableResponse> {
+        let schema = self.storage.get_table(&req.name).unwrap();
+        grpc::SingleResponse::completed(proto::GetTableResponse {
+            sql: schema.to_query(),
+            ..Default::default()
+        })
     }
 }
 

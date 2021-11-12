@@ -39,6 +39,33 @@ impl Client {
             .wait()?;
         ResultSet::from_grpc(metadata, iter)
     }
+
+    /// Fetches the table schema as SQL
+    pub fn get_table(&self, table: &str) -> Result<String, Error> {
+        let (_, resp, _) = self
+            .client
+            .get_table(
+                grpc::RequestOptions::new(),
+                proto::GetTableRequest {
+                    name: table.to_string(),
+                    ..Default::default()
+                },
+            )
+            .wait()?;
+        Ok(resp.sql)
+    }
+
+    /// Checks server status
+    pub fn status(&self) -> Result<Status, Error> {
+        let (_, resp, _) = self
+            .client
+            .status(grpc::RequestOptions::new(), proto::StatusRequest::new())
+            .wait()?;
+        Ok(Status {
+            id: resp.id,
+            version: resp.version,
+        })
+    }
 }
 
 pub struct ResultSet {
@@ -95,4 +122,10 @@ impl ResultSet {
             Some(Field_oneof_value::string(s)) => Value::String(s),
         }
     }
+}
+
+/// Server status
+pub struct Status {
+    pub id: String,
+    pub version: String,
 }

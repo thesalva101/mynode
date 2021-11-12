@@ -7,6 +7,9 @@ service StoreService {
 
   // Query runs an SQL query
   rpc Query(QueryRequest) returns (stream Row) {};
+  
+  // GetTable fetches the schema for a table
+  rpc GetTable(GetTableRequest) returns (GetTableResponse) {};
 
   // Get a value from store
   rpc Get(GetRequest) returns (GetResponse) {};
@@ -58,3 +61,13 @@ message SetResponse {
   string key = 1;
   string value = 2;
 };
+
+message GetTableRequest {
+  string name = 1;
+}
+
+// TODO: FIXME We currently just return the CREATE TABLE query for the table,
+// to avoid having to map the entire schema data structure to Protobuf.
+message GetTableResponse {
+  string sql = 1;
+}
