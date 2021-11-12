@@ -1,9 +1,11 @@
 mod file;
 mod kvmemory;
+mod raft;
 
 use crate::Error;
 pub use file::File;
 pub use kvmemory::KVMemory;
+pub use raft::Raft;
 
 pub trait Store: 'static + Sync + Send + std::fmt::Debug {
     fn delete(&mut self, key: &str) -> Result<(), Error>;

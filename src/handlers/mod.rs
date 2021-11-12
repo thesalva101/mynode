@@ -10,8 +10,6 @@ use crate::handlers::store::StoreServiceImpl;
 use crate::proto;
 use crate::raft::Raft;
 use crate::sql::Storage;
-use crate::state::State;
-use crate::store::{File, KVMemory};
 
 pub struct Node {
     pub id: String,
@@ -51,8 +49,8 @@ impl Node {
         let raft = Raft::start(
             &self.id,
             self.peers.keys().cloned().collect(),
-            State::new(File::new(state_file)?),
-            File::new(raft_file)?,
+            crate::store::Raft::new_state(crate::store::File::new(state_file)?),
+            crate::store::File::new(raft_file)?,
             raft_transport,
         )?;
 
@@ -60,7 +58,7 @@ impl Node {
             StoreServiceImpl {
                 id: self.id.clone(),
                 raft: raft.clone(),
-                storage: Box::new(Storage::new(KVMemory::new())),
+                storage: Box::new(Storage::new(crate::store::Raft::new(raft.clone()))),
             },
         ));
         let _s = server.build()?;

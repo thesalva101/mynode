@@ -380,14 +380,7 @@ mod tests {
     #[test]
     fn new_single() {
         let (sender, _) = crossbeam_channel::unbounded();
-        let node = Node::new(
-            "a",
-            vec![],
-            KVMemory::new(),
-            crate::state::State::new(KVMemory::new()),
-            sender,
-        )
-        .unwrap();
+        let node = Node::new("a", vec![], KVMemory::new(), TestState::new(), sender).unwrap();
         match node {
             Node::Leader(rolenode) => {
                 assert_eq!(rolenode.id, "a".to_owned());
