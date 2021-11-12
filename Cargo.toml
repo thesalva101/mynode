@@ -28,4 +28,5 @@ protoc-rust-grpc = "~0.6.2"
 
 [dev-dependencies]
 assert_matches = "~1.5.0"
+goldenfile = "~1.0.3"
 tempfile = "~3.2.0"
