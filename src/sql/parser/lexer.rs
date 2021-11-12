@@ -11,6 +11,8 @@ pub enum Token {
     String(String),
     /// A textual identifier
     Ident(String),
+    /// Special keywords
+    Keyword(Keyword),
     /// The period symbol .
     Period,
     /// The equals symbol =
@@ -49,6 +51,7 @@ impl std::fmt::Display for Token {
             Token::Number(n) => n,
             Token::String(s) => s,
             Token::Ident(s) => s,
+            Token::Keyword(k) => k.to_str(),
             Token::Period => ".",
             Token::Equals => "=",
             Token::GreaterThan => ">",
@@ -62,9 +65,45 @@ impl std::fmt::Display for Token {
             Token::Exclamation => "!",
             Token::Question => "?",
             Token::OpenParen => "(",
-            Token::CloseParen => ".into())",
+            Token::CloseParen => ")",
             Token::Comma => ",",
         })
+    }
+}
+
+impl From<Keyword> for Token {
+    fn from(keyword: Keyword) -> Self {
+        Self::Keyword(keyword)
+    }
+}
+
+/// Lexer keywords
+#[derive(Clone, Debug, PartialEq)]
+pub enum Keyword {
+    As,
+    Select,
+}
+
+impl Keyword {
+    fn from_str(ident: &str) -> Option<Self> {
+        Some(match ident.to_uppercase().as_ref() {
+            "AS" => Self::As,
+            "SELECT" => Self::Select,
+            _ => return None,
+        })
+    }
+
+    fn to_str(&self) -> &str {
+        match self {
+            Self::As => "AS",
+            Self::Select => "SELECT",
+        }
+    }
+}
+
+impl std::fmt::Display for Keyword {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        f.write_str(self.to_str())
     }
 }
 
@@ -136,13 +175,15 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    /// Scans the input for the next ident token, if any
+    /// Scans the input for the next ident or keyword token, if any
     fn scan_ident(&mut self) -> Option<Token> {
         let mut name = self.next_if(|c| c.is_alphabetic())?.to_string();
         while let Some(c) = self.next_if(|c| c.is_alphanumeric() || c == '_') {
             name.push(c)
         }
-        Some(Token::Ident(name))
+        Keyword::from_str(&name)
+            .map(Token::Keyword)
+            .or(Some(Token::Ident(name)))
     }
 
     /// Scans the input for the next number token, if any
@@ -253,6 +294,7 @@ mod tests {
 
     #[test]
     fn select() {
+        use super::Keyword;
         use Token::*;
         assert_scan(
             "
@@ -261,7 +303,7 @@ mod tests {
             WHERE album.genre != 'country' AND album.release_year >= 1980
             ORDER BY artist.name ASC, age DESC",
             vec![
-                Ident("SELECT".into()),
+                Keyword::Select.into(),
                 Ident("artist".into()),
                 Period,
                 Ident("name".into()),
@@ -282,7 +324,7 @@ mod tests {
                 Ident("album".into()),
                 Period,
                 Ident("release_year".into()),
-                Ident("AS".into()),
+                Keyword::As.into(),
                 Ident("age".into()),
                 Ident("FROM".into()),
                 Ident("artist".into()),

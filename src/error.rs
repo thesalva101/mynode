@@ -105,6 +105,18 @@ impl<T> From<std::sync::PoisonError<T>> for Error {
     }
 }
 
+impl From<std::num::ParseFloatError> for Error {
+    fn from(err: std::num::ParseFloatError) -> Self {
+        Error::Parse(err.to_string())
+    }
+}
+
+impl From<std::num::ParseIntError> for Error {
+    fn from(err: std::num::ParseIntError) -> Self {
+        Error::Parse(err.to_string())
+    }
+}
+
 impl From<crossbeam_channel::RecvError> for Error {
     fn from(err: crossbeam_channel::RecvError) -> Self {
         Error::Network(err.to_string())

@@ -6,6 +6,7 @@ use crate::proto::QueryRequest;
 use crate::raft::Raft;
 use crate::serializer::{deserialize, serialize};
 use crate::sql::types::{Row, Value};
+use crate::sql::{Parser, Plan};
 use crate::state::{Mutation, Read};
 use crate::{
     proto,
@@ -80,22 +81,18 @@ impl proto::StoreService for StoreRaftServiceImpl {
         grpc::SingleResponse::completed(response)
     }
 
-    fn query(&self, _: RequestOptions, _req: QueryRequest) -> StreamingResponse<proto::Row> {
+    fn query(&self, _: RequestOptions, req: QueryRequest) -> StreamingResponse<proto::Row> {
+        let plan = Plan::build(Parser::new(&req.query).parse().unwrap()).unwrap();
         let mut metadata = grpc::Metadata::new();
         metadata.add(
             grpc::MetadataKey::from("columns"),
-            serialize(vec!["null", "boolean", "integer", "float", "string"])
-                .unwrap()
-                .into(),
+            serialize(&plan.columns).unwrap().into(),
         );
-        let rows = vec![Self::row_to_protobuf(vec![
-            Value::Null,
-            Value::Boolean(true),
-            Value::Integer(7),
-            Value::Float(3.145),
-            Value::String("Hi! 👏".into()),
-        ])];
-        grpc::StreamingResponse::iter_with_metadata(metadata, rows.into_iter())
+        // TODO: FIXME This needs to handle errors
+        grpc::StreamingResponse::iter_with_metadata(
+            metadata,
+            plan.map(|row| Self::row_to_protobuf(row.unwrap())),
+        )
     }
 }
 
