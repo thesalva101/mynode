@@ -1,4 +1,4 @@
-use super::super::types::Value;
+use super::types::Value;
 use crate::Error;
 
 /// An expression

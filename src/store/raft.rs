@@ -1,7 +1,6 @@
-use super::{Iter, KVPair, Store};
+use super::{Iter, KVPair, Range, Store};
 use crate::raft;
 use crate::serializer::{deserialize, serialize};
-use crate::sql::schema;
 use crate::Error;
 use serde_derive::{Deserialize, Serialize};
 
@@ -48,7 +47,7 @@ impl Store for Raft {
         Ok(())
     }
 
-    fn iter_prefix(&self, prefix: &str) -> Box<dyn Iterator<Item = Result<KVPair, Error>>> {
+    fn iter_prefix(&self, prefix: &str) -> Box<Range> {
         let command = serialize(Read::NaiveLowerBound(prefix.into())).unwrap();
         let data = self.raft.read(command).unwrap();
         let items: Vec<KVPair> = deserialize(data).unwrap();

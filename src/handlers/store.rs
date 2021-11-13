@@ -5,14 +5,14 @@ use grpc::{RequestOptions, StreamingResponse};
 use crate::proto::QueryRequest;
 use crate::raft::Raft;
 use crate::serializer::serialize;
+use crate::sql;
 use crate::sql::types::{Row, Value};
-use crate::sql::{Parser, Plan, Planner, Storage};
 use crate::{proto, Error};
 
 pub struct StoreServiceImpl {
     pub id: String,
     pub raft: Raft,
-    pub storage: Box<Storage>,
+    pub storage: Box<sql::Storage>,
 }
 
 fn error_response<T: Send>(error: Box<dyn std::error::Error>) -> grpc::SingleResponse<T> {
@@ -35,8 +35,8 @@ impl proto::StoreService for StoreServiceImpl {
     }
 
     fn query(&self, _: RequestOptions, req: QueryRequest) -> StreamingResponse<proto::Row> {
-        let plan = match self.execute(&req.query) {
-            Ok(plan) => plan,
+        let result = match self.execute(&req.query) {
+            Ok(result) => result,
             Err(err) => {
                 return grpc::StreamingResponse::completed(vec![proto::Row {
                     error: Self::error_to_protobuf(err),
@@ -45,13 +45,15 @@ impl proto::StoreService for StoreServiceImpl {
             }
         };
         let mut metadata = grpc::Metadata::new();
+        // TODO: FIXME, retrieve columns
+        // metadata.add(grpc::MetadataKey::from("columns"), serialize(&plan.columns).unwrap().into());
         metadata.add(
             grpc::MetadataKey::from("columns"),
-            serialize(&plan.columns).unwrap().into(),
+            serialize(Vec::<String>::new()).unwrap().into(),
         );
         grpc::StreamingResponse::iter_with_metadata(
             metadata,
-            plan.map(|result| match result {
+            result.map(|r| match r {
                 Ok(row) => Self::row_to_protobuf(row),
                 Err(err) => proto::Row {
                     error: Self::error_to_protobuf(err),
@@ -90,8 +92,10 @@ impl proto::StoreService for StoreServiceImpl {
 
 impl StoreServiceImpl {
     /// Executes an SQL statement
-    fn execute(&self, query: &str) -> Result<Plan, Error> {
-        Planner::new(self.storage.clone()).build(Parser::new(query).parse()?)
+    fn execute(&self, query: &str) -> Result<sql::ResultSet, Error> {
+        sql::Plan::build(sql::Parser::new(query).parse()?)?.execute(sql::Context {
+            storage: self.storage.clone(),
+        })
     }
 
     /// Converts an error into a protobuf object

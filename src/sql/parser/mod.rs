@@ -243,6 +243,7 @@ impl<'a> Parser<'a> {
     fn parse_statement_select(&mut self) -> Result<ast::Statement, Error> {
         Ok(ast::Statement::Select {
             select: self.parse_clause_select()?.unwrap(),
+            from: self.parse_clause_from()?,
         })
     }
 
@@ -256,6 +257,9 @@ impl<'a> Parser<'a> {
             labels: Vec::new(),
         };
         loop {
+            if self.next_if_token(Token::Asterisk).is_some() && clause.expressions.is_empty() {
+                break;
+            }
             clause.expressions.push(self.parse_expression(0)?);
             clause.labels.push(match self.peek()? {
                 Some(Token::Keyword(Keyword::As)) => {
@@ -269,6 +273,16 @@ impl<'a> Parser<'a> {
                 break;
             }
         }
+        Ok(Some(clause))
+    }
+
+    /// Parses a from clause
+    fn parse_clause_from(&mut self) -> Result<Option<ast::FromClause>, Error> {
+        if self.next_if_token(Keyword::From.into()).is_none() {
+            return Ok(None);
+        }
+        let mut clause = ast::FromClause { tables: Vec::new() };
+        clause.tables.push(self.next_ident()?);
         Ok(Some(clause))
     }
 

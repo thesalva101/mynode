@@ -1,5 +1,4 @@
 use super::schema;
-use super::schema::Table;
 use super::types;
 use crate::serializer::deserialize;
 use crate::serializer::serialize;
@@ -57,6 +56,24 @@ impl Storage {
         deserialize(table)
     }
 
+    /// Scan rows
+    pub fn scan_rows(
+        &self,
+        table_name: &str,
+    ) -> Box<dyn Iterator<Item = Result<types::Row, Error>> + Sync + Send> {
+        let key = format!("{}.", table_name);
+        let it = self
+            .kv
+            .read()
+            .unwrap()
+            .iter_prefix(&key)
+            .map(|res| match res {
+                Ok((_, raw_row)) => deserialize(raw_row),
+                Err(err) => Err(err),
+            });
+        Box::new(it)
+    }
+
     /// Creates a row in a table
     pub fn create_row(&mut self, table_name: &str, row: types::Row) -> Result<(), Error> {
         let table = self.get_table(&table_name)?;
@@ -68,7 +85,7 @@ impl Storage {
     }
 
     /// Creates a table
-    pub fn create_table(&mut self, table: schema::Table) -> Result<(), Error> {
+    pub fn create_table(&mut self, table: &schema::Table) -> Result<(), Error> {
         if self.table_exists(&table.name)? {
             Err(Error::Value(format!("Table {} already exists", table.name)))
         } else {
@@ -91,6 +108,6 @@ impl Storage {
 
     /// Generates a key for a row
     fn key_row(table: &str, id: &str) -> String {
-        format!("{}.{}", Self::key_table(table), id)
+        format!("{}.{}", table, id)
     }
 }

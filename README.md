@@ -1,6 +1,6 @@
-# toyDB
+# mynode
 
-[![Build Status](https://cloud.drone.io/api/badges/erikgrinaker/toydb/status.svg)](https://cloud.drone.io/erikgrinaker/toydb)
+[![Build Status](https://cloud.drone.io/api/badges/erikgrinaker/mynode/status.svg)](https://cloud.drone.io/erikgrinaker/mynode)
 
 Distributed SQL database in Rust, written as a learning project.
 
@@ -20,7 +20,12 @@ by running:
 ```sh
 cargo run --bin mynode
 Connected to node "mynode" (version 0.1.0). Enter !help for instructions.
-toydb>
+mynode> CREATE TABLE movie (id INTEGER PRIMARY KEY, title VARCHAR NOT NULL)
+mynode> INSERT INTO movie VALUES (1, 'Sicario'), (2, 'Stalker'), (3, 'Her')
+mynode> SELECT * FROM movie
+1|Sicario
+2|Stalker
+3|Her
 ```
 
 ## Project Outline
@@ -76,7 +81,7 @@ Below is an incomplete list of known issues preventing this from being a "real" 
 
 ### Schema
 
-- **Single database:** only a single, unnamed database is supported per ToyDB cluster.
+- **Single database:** only a single, unnamed database is supported per mynode cluster.
 
 - **Schema changes:** schema changes other than creating or dropping tables and indexes is not supported, i.e. there is no `ALTER TABLE`.
 

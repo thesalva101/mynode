@@ -20,6 +20,8 @@ pub enum Statement {
     Select {
         /// The select clause
         select: SelectClause,
+        /// The from clause,
+        from: Option<FromClause>,
     },
 }
 
@@ -35,10 +37,16 @@ pub struct ColumnSpec {
 /// A SELECT clause
 #[derive(Clone, Debug, PartialEq)]
 pub struct SelectClause {
-    /// The expressions to select
+    /// The expressions to select. Empty list means everything, i.e. *.
     pub expressions: Vec<Expression>,
     /// The expression labels, if any
     pub labels: Vec<Option<String>>,
+}
+
+/// A FROM clause
+#[derive(Clone, Debug, PartialEq)]
+pub struct FromClause {
+    pub tables: Vec<String>,
 }
 
 /// Expressions

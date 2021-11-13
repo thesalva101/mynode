@@ -8,6 +8,7 @@ pub use kvmemory::KVMemory;
 pub use raft::Raft;
 
 type KVPair = (String, Vec<u8>);
+type Range = dyn Iterator<Item = Result<KVPair, Error>> + Sync + Send;
 
 pub trait Store: 'static + Sync + Send + std::fmt::Debug {
     fn delete(&mut self, key: &str) -> Result<(), Error>;
@@ -15,7 +16,7 @@ pub trait Store: 'static + Sync + Send + std::fmt::Debug {
     fn set(&mut self, key: &str, value: Vec<u8>) -> Result<(), Error>;
 
     /// Returns an iterator over all pairs in the store under a key prefix
-    fn iter_prefix(&self, prefix: &str) -> Box<dyn Iterator<Item = Result<KVPair, Error>>>;
+    fn iter_prefix(&self, prefix: &str) -> Box<Range>;
 }
 
 /// This is a terrible, temporary iterator implementation which is prepopulated
