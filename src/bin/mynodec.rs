@@ -110,12 +110,12 @@ impl MyNodeConsole {
 
     /// Runs a query and displays the results
     fn execute_query(&mut self, query: &str) -> Result<(), mynode::Error> {
-        let mut resultset = self.client.query(query)?;
+        let resultset = self.client.query(query)?;
         if self.show_headers {
             println!("{}", resultset.columns().join("|"));
         }
-        while let Some(Ok(row)) = resultset.next() {
-            let formatted: Vec<String> = row.into_iter().map(|v| format!("{}", v)).collect();
+        for result in resultset {
+            let formatted: Vec<String> = result?.into_iter().map(|v| format!("{}", v)).collect();
             println!("{}", formatted.join("|"));
         }
         Ok(())

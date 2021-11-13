@@ -48,6 +48,7 @@ impl Client {
                 },
             )
             .wait()?;
+        error_from_protobuf(resp.error)?;
         Ok(resp.sql)
     }
 
@@ -73,12 +74,15 @@ impl Iterator for ResultSet {
     type Item = Result<Row, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        Some(
-            self.rows
-                .next()?
-                .map(Self::row_from_protobuf)
-                .map_err(|e| e.into()),
-        )
+        match self.rows.next()? {
+            Ok(row) => {
+                if let Err(err) = error_from_protobuf(row.error.clone()) {
+                    return Some(Err(err));
+                }
+                Some(Ok(row_from_protobuf(row)))
+            }
+            Err(err) => Some(Err(err.into())),
+        }
     }
 }
 
@@ -91,32 +95,14 @@ impl ResultSet {
             metadata
                 .get("columns")
                 .map(|c| c.to_vec())
-                .ok_or_else(|| Error::Network("Columns not found in gRPC result".into()))?,
-        )?;
-
+                .unwrap_or_else(Vec::new),
+        )
+        .unwrap_or_else(|_| Vec::new());
         Ok(Self { columns, rows })
     }
 
     pub fn columns(&self) -> Vec<String> {
         self.columns.clone()
-    }
-
-    fn row_from_protobuf(proto_row: proto::Row) -> Row {
-        proto_row
-            .field
-            .into_iter()
-            .map(Self::value_from_protobuf)
-            .collect()
-    }
-
-    fn value_from_protobuf(field: proto::Field) -> Value {
-        match field.value {
-            None => Value::Null,
-            Some(Field_oneof_value::boolean(b)) => Value::Boolean(b),
-            Some(Field_oneof_value::integer(i)) => Value::Integer(i),
-            Some(Field_oneof_value::float(f)) => Value::Float(f),
-            Some(Field_oneof_value::string(s)) => Value::String(s),
-        }
     }
 }
 
@@ -124,4 +110,30 @@ impl ResultSet {
 pub struct Status {
     pub id: String,
     pub version: String,
+}
+
+/// Converts a protobuf error into a node error
+fn error_from_protobuf(err: protobuf::SingularPtrField<proto::Error>) -> Result<(), Error> {
+    match err.into_option() {
+        Some(err) => Err(Error::Internal(err.message)),
+        _ => Ok(()),
+    }
+}
+
+fn row_from_protobuf(proto_row: proto::Row) -> Row {
+    proto_row
+        .field
+        .into_iter()
+        .map(value_from_protobuf)
+        .collect()
+}
+
+fn value_from_protobuf(field: proto::Field) -> Value {
+    match field.value {
+        None => Value::Null,
+        Some(Field_oneof_value::boolean(b)) => Value::Boolean(b),
+        Some(Field_oneof_value::integer(i)) => Value::Integer(i),
+        Some(Field_oneof_value::float(f)) => Value::Float(f),
+        Some(Field_oneof_value::string(s)) => Value::String(s),
+    }
 }

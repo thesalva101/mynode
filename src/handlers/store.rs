@@ -2,12 +2,12 @@ use std::time::{SystemTime, SystemTimeError, UNIX_EPOCH};
 
 use grpc::{RequestOptions, StreamingResponse};
 
-use crate::proto;
 use crate::proto::QueryRequest;
 use crate::raft::Raft;
 use crate::serializer::serialize;
 use crate::sql::types::{Row, Value};
-use crate::sql::{Parser, Planner, Storage};
+use crate::sql::{Parser, Plan, Planner, Storage};
+use crate::{proto, Error};
 
 pub struct StoreServiceImpl {
     pub id: String,
@@ -26,33 +26,38 @@ impl proto::StoreService for StoreServiceImpl {
         _: grpc::RequestOptions,
         _: proto::StatusRequest,
     ) -> grpc::SingleResponse<proto::StatusResponse> {
-        let time = match self.get_timestamp() {
-            Ok(t) => t,
-            Err(e) => return error_response(e.into()),
-        };
-
         let response = proto::StatusResponse {
             id: self.id.clone(),
             version: env!("CARGO_PKG_VERSION").into(),
-            time: time,
             ..Default::default()
         };
         grpc::SingleResponse::completed(response)
     }
 
     fn query(&self, _: RequestOptions, req: QueryRequest) -> StreamingResponse<proto::Row> {
-        let plan = Planner::new(self.storage.clone())
-            .build(Parser::new(&req.query).parse().unwrap())
-            .unwrap();
+        let plan = match self.execute(&req.query) {
+            Ok(plan) => plan,
+            Err(err) => {
+                return grpc::StreamingResponse::completed(vec![proto::Row {
+                    error: Self::error_to_protobuf(err),
+                    ..Default::default()
+                }])
+            }
+        };
         let mut metadata = grpc::Metadata::new();
         metadata.add(
             grpc::MetadataKey::from("columns"),
             serialize(&plan.columns).unwrap().into(),
         );
-        // TODO: FIXME This needs to handle errors
         grpc::StreamingResponse::iter_with_metadata(
             metadata,
-            plan.map(|row| Self::row_to_protobuf(row.unwrap())),
+            plan.map(|result| match result {
+                Ok(row) => Self::row_to_protobuf(row),
+                Err(err) => proto::Row {
+                    error: Self::error_to_protobuf(err),
+                    ..Default::default()
+                },
+            }),
         )
     }
 
@@ -61,15 +66,29 @@ impl proto::StoreService for StoreServiceImpl {
         _: grpc::RequestOptions,
         req: proto::GetTableRequest,
     ) -> grpc::SingleResponse<proto::GetTableResponse> {
-        let schema = self.storage.get_table(&req.name).unwrap();
-        grpc::SingleResponse::completed(proto::GetTableResponse {
-            sql: schema.to_query(),
-            ..Default::default()
-        })
+        let mut resp = proto::GetTableResponse::new();
+        match self.storage.get_table(&req.name) {
+            Ok(schema) => resp.sql = schema.to_query(),
+            Err(err) => resp.error = Self::error_to_protobuf(err),
+        };
+        grpc::SingleResponse::completed(resp)
     }
 }
 
 impl StoreServiceImpl {
+    /// Executes an SQL statement
+    fn execute(&self, query: &str) -> Result<Plan, Error> {
+        Planner::new(self.storage.clone()).build(Parser::new(query).parse()?)
+    }
+
+    /// Converts an error into a protobuf object
+    fn error_to_protobuf(err: Error) -> protobuf::SingularPtrField<proto::Error> {
+        protobuf::SingularPtrField::from(Some(proto::Error {
+            message: err.to_string(),
+            ..Default::default()
+        }))
+    }
+
     fn get_timestamp(&self) -> Result<i64, SystemTimeError> {
         SystemTime::now()
             .duration_since(UNIX_EPOCH)

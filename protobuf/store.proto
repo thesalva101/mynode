@@ -19,7 +19,8 @@ message QueryRequest {
 };
 
 message Row {
-  repeated Field field = 1;
+  Error error = 1;
+  repeated Field field = 2;
 };
 
 message Field {
@@ -38,5 +39,6 @@ message GetTableRequest {
 // TODO: FIXME We currently just return the CREATE TABLE query for the table,
 // to avoid having to map the entire schema data structure to Protobuf.
 message GetTableResponse {
-  string sql = 1;
+  Error error = 1;
+  string sql = 2;
 }

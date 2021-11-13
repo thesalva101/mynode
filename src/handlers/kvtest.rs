@@ -40,15 +40,9 @@ impl proto::KvTestService for KvTestServiceImpl {
         _: grpc::RequestOptions,
         _: proto::StatusRequest,
     ) -> grpc::SingleResponse<proto::StatusResponse> {
-        let time = match self.get_timestamp() {
-            Ok(t) => t,
-            Err(e) => return error_response(e.into()),
-        };
-
         let response = proto::StatusResponse {
             id: self.id.clone(),
             version: env!("CARGO_PKG_VERSION").into(),
-            time: time,
             ..Default::default()
         };
         grpc::SingleResponse::completed(response)
