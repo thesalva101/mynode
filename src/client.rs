@@ -36,6 +36,16 @@ impl Client {
         ResultSet::from_grpc(metadata, iter)
     }
 
+    /// Lists database tables
+    pub fn list_tables(&self) -> Result<Vec<String>, Error> {
+        let (_, resp, _) = self
+            .client
+            .list_tables(grpc::RequestOptions::new(), proto::Empty::new())
+            .wait()?;
+        error_from_protobuf(resp.error)?;
+        Ok(resp.name.to_vec())
+    }
+
     /// Fetches the table schema as SQL
     pub fn get_table(&self, table: &str) -> Result<String, Error> {
         let (_, resp, _) = self

@@ -1,10 +1,13 @@
 use super::schema;
+use super::schema::Table;
 use super::types;
 use crate::serializer::deserialize;
 use crate::serializer::serialize;
 use crate::store::Store;
 use crate::Error;
 use std::sync::{Arc, RwLock};
+
+const TABLE_PREFIX: &str = "schema.table";
 
 #[derive(Clone)]
 pub struct Storage {
@@ -30,6 +33,17 @@ impl Storage {
         let table_key = Self::key_table(table_name);
         let table = self.kv.read()?.get(&table_key)?;
         Ok(table.is_some())
+    }
+
+    /// List all the existing tables
+    pub fn list_tables(&self) -> Result<Vec<String>, Error> {
+        let mut iter = self.kv.read()?.iter_prefix(TABLE_PREFIX);
+        let mut tables = Vec::new();
+        while let Some((_, value)) = iter.next().transpose()? {
+            let schema: schema::Table = deserialize(value)?;
+            tables.push(schema.name)
+        }
+        Ok(tables)
     }
 
     /// Fetches a table schema
@@ -72,7 +86,7 @@ impl Storage {
 
     /// Generates a key for a table
     fn key_table(table: &str) -> String {
-        format!("schema.table.{}", table)
+        format!("{}.{}", TABLE_PREFIX, table)
     }
 
     /// Generates a key for a row

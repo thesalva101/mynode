@@ -1,6 +1,6 @@
 mod parser;
 mod plan;
-mod schema;
+pub mod schema;
 mod storage;
 #[cfg(test)]
 mod tests;

@@ -73,6 +73,19 @@ impl proto::StoreService for StoreServiceImpl {
         };
         grpc::SingleResponse::completed(resp)
     }
+
+    fn list_tables(
+        &self,
+        _: grpc::RequestOptions,
+        _: proto::Empty,
+    ) -> grpc::SingleResponse<proto::ListTablesResponse> {
+        let mut resp = proto::ListTablesResponse::new();
+        match self.storage.list_tables() {
+            Ok(tables) => resp.name = protobuf::RepeatedField::from_vec(tables),
+            Err(err) => resp.error = Self::error_to_protobuf(err),
+        }
+        grpc::SingleResponse::completed(resp)
+    }
 }
 
 impl StoreServiceImpl {
