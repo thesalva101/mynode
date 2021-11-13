@@ -1,4 +1,4 @@
-use super::Store;
+use super::{Iter, KVPair, Store};
 use crate::Error;
 use std::collections::BTreeMap;
 use std::io::Seek;
@@ -46,6 +46,13 @@ impl Store for File {
         self.data.insert(key.to_string(), value);
         self.flush()?;
         Ok(())
+    }
+
+    fn iter_prefix(&self, prefix: &str) -> Box<dyn Iterator<Item = Result<KVPair, Error>>> {
+        let from = prefix.to_string();
+        let to = from.clone() + &std::char::MAX.to_string();
+        info!("file> from {} to {}", from, to);
+        Box::new(Iter::from(self.data.range(from..to)))
     }
 }
 

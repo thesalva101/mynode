@@ -1,4 +1,4 @@
-use super::Store;
+use super::{Iter, KVPair, Store};
 use crate::raft;
 use crate::serializer::{deserialize, serialize};
 use crate::Error;
@@ -46,6 +46,12 @@ impl Store for Raft {
             .mutate(serialize(Mutation::Set(key.to_string(), value))?)?;
         Ok(())
     }
+
+    fn iter_prefix(&self, prefix: &str) -> Box<dyn Iterator<Item = Result<KVPair, Error>>> {
+        let command = serialize(Read::NaiveLowerBound(prefix.into())).unwrap();
+        let data = self.raft.read(command).unwrap();
+        Box::new(Iter::from_vec(deserialize(data).unwrap()))
+    }
 }
 
 /// A state machine mutation
@@ -62,6 +68,8 @@ enum Mutation {
 enum Read {
     /// Fetches a key
     Get(String),
+    /// Fetches a naive lower bound impl with IterPrefix
+    NaiveLowerBound(String),
 }
 
 /// The underlying state machine for the store
@@ -91,6 +99,14 @@ impl raft::State for State {
             Read::Get(key) => {
                 info!("Getting {}", key);
                 Ok(serialize(self.store.get(&key)?)?)
+            }
+            Read::NaiveLowerBound(prefix) => {
+                info!("raft> naive lower bound");
+                let pairs: Vec<KVPair> = self
+                    .store
+                    .iter_prefix(&prefix)
+                    .collect::<Result<_, Error>>()?;
+                Ok(serialize(pairs)?)
             }
         }
     }

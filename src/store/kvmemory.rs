@@ -1,4 +1,4 @@
-use super::Store;
+use super::{Iter, KVPair, Store};
 use crate::Error;
 use std::{
     collections::BTreeMap,
@@ -34,6 +34,13 @@ impl Store for KVMemory {
     fn delete(&mut self, key: &str) -> Result<(), Error> {
         self.data.clone().write()?.remove(key);
         Ok(())
+    }
+
+    fn iter_prefix(&self, prefix: &str) -> Box<dyn Iterator<Item = Result<KVPair, Error>>> {
+        let from = prefix.to_string();
+        let to = from.clone() + &std::char::MAX.to_string();
+        info!("from {} to {}", from, to);
+        Box::new(Iter::from(self.data.read().unwrap().range(from..to)))
     }
 }
 
