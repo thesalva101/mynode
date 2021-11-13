@@ -23,16 +23,16 @@ impl KVMemory {
 
 impl Store for KVMemory {
     fn get(&self, key: &str) -> Result<Option<Vec<u8>>, Error> {
-        Ok(self.data.clone().read()?.get(key).cloned())
+        Ok(self.data.read()?.get(key).cloned())
     }
 
     fn set(&mut self, key: &str, value: Vec<u8>) -> Result<(), Error> {
-        self.data.clone().write()?.insert(key.to_string(), value);
+        self.data.write()?.insert(key.to_string(), value);
         Ok(())
     }
 
     fn delete(&mut self, key: &str) -> Result<(), Error> {
-        self.data.clone().write()?.remove(key);
+        self.data.write()?.remove(key);
         Ok(())
     }
 
