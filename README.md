@@ -1,4 +1,6 @@
-# MyNode
+# toyDB
+
+[![Build Status](https://cloud.drone.io/api/badges/erikgrinaker/toydb/status.svg)](https://cloud.drone.io/erikgrinaker/toydb)
 
 Distributed SQL database in Rust, written as a learning project.
 
@@ -6,31 +8,36 @@ The primary goal is to build a minimally functional yet correct distributed data
 
 ## Usage
 
-A local five-node cluster can be started by running:
+A local five-node cluster can be started on `localhost` ports `9601` to `9605` by running:
 
 ```sh
 docker-compose up --build
 ```
 
-The nodes can be contacted on `localhost` ports `9601` to `9605`, e.g.:
+A command-line REPL client can be built and used with the node on `localhost` port `9605`
+by running:
 
 ```sh
-./tmp/grpcurl -plaintext -proto protobuf/service.proto localhost:9625 RpcService/Status
+cargo run --bin mynode
+Connected to node "mynode" (version 0.1.0). Enter !help for instructions.
+toydb>
 ```
 
 ## Project Outline
 
-- [x] **Networking:** gRPC, no security.
+- [x] **Networking:** gRPC for internal and external communication, no security.
+
+- [x] **Client:** Simple interactive REPL client over gRPC.
 
 - [x] **Consensus:** Self-written Raft implementation with strictly serializable reads and writes.
 
-- [ ] **Storage:** Self-written key-value engine using B+-trees (and possibly LSM-trees), with secondary indexes. MessagePack for serialization. No log compaction or write-ahead log.
+- [ ] **Storage:** Self-written key-value store using B+-trees and possibly LSM-trees. MessagePack for serialization. No log compaction or write-ahead log.
 
 - [x] **Data Types:** Support for nulls, booleans, 64-bit integers, 64-bit floats, and UTF-8 strings up to 1 KB.
 
-- [ ] **Schemas:** Compulsory singluar primary keys, unique indexes, and foreign keys.
+- [ ] **Schemas:** Compulsory singluar primary keys, unique and foreign key constraints, indexes.
 
-- [ ] **Transactions:** MVCC-based serializable snapshot isolation.
+- [ ] **Transactions:** Self-written ACID-compliant transaction engine with MVCC-based serializable snapshot isolation.
 
 - [ ] **Query Engine:** Self-written iterator-based engine with simple heuristic optimizer.
 
@@ -44,8 +51,6 @@ The nodes can be contacted on `localhost` ports `9601` to `9605`, e.g.:
   - `DELETE FROM ... WHERE ...`
   - `SELECT ... FROM ... WHERE ... GROUP BY ... HAVING ... ORDER BY ...`
   - `EXPLAIN SELECT ...`
-
-- [ ] **Client:** Simple interactive REPL client over gRPC.
 
 - [ ] **Verification:** [Jepsen](https://github.com/jepsen-io/jepsen) test suite.
 
