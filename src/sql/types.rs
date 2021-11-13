@@ -9,7 +9,7 @@ pub enum DataType {
     String,
 }
 
-#[derive(Clone, Debug, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, PartialEq, PartialOrd, Serialize, Deserialize)]
 /// A value
 pub enum Value {
     /// An unknown value

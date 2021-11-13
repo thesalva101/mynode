@@ -8,6 +8,12 @@ pub enum Statement {
         name: String,
         columns: Vec<ColumnSpec>,
     },
+    /// An INSERT statement
+    Insert {
+        table: String,
+        columns: Option<Vec<String>>,
+        values: Vec<Expressions>,
+    },
     /// A DROP TABLE statement
     DropTable(String),
     /// A SELECT statement
@@ -53,6 +59,8 @@ impl From<Operation> for Expression {
         Self::Operation(op)
     }
 }
+
+pub type Expressions = Vec<Expression>;
 
 /// Literals
 #[derive(Clone, Debug, PartialEq)]

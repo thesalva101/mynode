@@ -1,4 +1,5 @@
 use super::schema;
+use super::types;
 use crate::serializer::deserialize;
 use crate::serializer::serialize;
 use crate::store::Store;
@@ -42,6 +43,16 @@ impl Storage {
         deserialize(table)
     }
 
+    /// Creates a row in a table
+    pub fn create_row(&mut self, table_name: &str, row: types::Row) -> Result<(), Error> {
+        let table = self.get_table(&table_name)?;
+        let id = row
+            .get(table.get_primary_key_index())
+            .ok_or_else(|| Error::Value("No primary key value".into()))?;
+        let row_key = Self::key_row(table_name, &id.to_string());
+        self.kv.write()?.set(&row_key, serialize(row)?)
+    }
+
     /// Creates a table
     pub fn create_table(&mut self, table: schema::Table) -> Result<(), Error> {
         if self.table_exists(&table.name)? {
@@ -62,5 +73,10 @@ impl Storage {
     /// Generates a key for a table
     fn key_table(table: &str) -> String {
         format!("schema.table.{}", table)
+    }
+
+    /// Generates a key for a row
+    fn key_row(table: &str, id: &str) -> String {
+        format!("{}.{}", Self::key_table(table), id)
     }
 }
